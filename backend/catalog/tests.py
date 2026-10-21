@@ -1,0 +1,260 @@
+import io
+import json
+
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase
+from rest_framework.test import APITestCase
+
+from accounts.models import User
+from payments.models import Subscription
+
+from . import delta
+from .importers import import_manuscript
+from .models import Chapter, Column, Genre, Story
+
+
+def doc(*lines):
+    return delta.paragraphs_to_ops([([(line, None)], None) for line in lines])
+
+
+class DeltaTests(TestCase):
+    def test_truncate_counts_only_non_empty_lines(self):
+        ops = [{"insert": "One\n\nTwo\n"}, {"insert": "Heading"}, {"insert": "\n", "attributes": {"header": 2}}, {"insert": "Four\n"}]
+        kept, used, truncated = delta.truncate_paragraphs(ops, 3)
+        self.assertEqual(used, 3)
+        self.assertTrue(truncated)
+        self.assertEqual(delta.plain_text(kept), "One\n\nTwo\nHeading\n")
+        self.assertEqual(kept[-1], {"insert": "\n", "attributes": {"header": 2}})
+
+    def test_truncate_whole_document_is_not_truncated(self):
+        kept, used, truncated = delta.truncate_paragraphs(doc("a", "b"), 5)
+        self.assertEqual(used, 2)
+        self.assertFalse(truncated)
+
+    def test_validate_rejects_non_insert_ops(self):
+        with self.assertRaises(ValueError):
+            delta.validate_ops([{"delete": 3}])
+
+
+class ImporterTests(TestCase):
+    def test_markdown_front_matter_and_chapters(self):
+        text = (
+            "---\ntitle: Ang Diwata\nauthor: L. Cruz\ngenres: Fantasy, Philippine Folklore\n---\n"
+            "Prologue text.\n\n# Unang Kabanata\n\nShe **ran** into the *forest*.\n\n## Scene\n\n- one\n- two\n\n---\n\n# Ikalawa\n\nEnd."
+        )
+        story = import_manuscript("diwata.md", text.encode())
+        self.assertEqual(story.title, "Ang Diwata")
+        self.assertEqual(story.author_name, "L. Cruz")
+        self.assertEqual(story.genres, ["Fantasy", "Philippine Folklore"])
+        self.assertEqual([c.title for c in story.chapters], ["Chapter 1", "Unang Kabanata", "Ikalawa"])
+        ops = story.chapters[1].content
+        self.assertIn({"insert": "ran", "attributes": {"bold": True}}, ops)
+        self.assertIn({"insert": "forest", "attributes": {"italic": True}}, ops)
+        self.assertIn({"insert": "\n", "attributes": {"list": "bullet"}}, ops)
+
+    def test_text_chapter_detection(self):
+        text = "Title: Gabi\n\nKabanata 1\nMadilim ang gabi.\nTahimik.\n\nKabanata 2\n\nUmaga na."
+        story = import_manuscript("gabi.txt", text.encode())
+        self.assertEqual(story.title, "Gabi")
+        self.assertEqual([c.title for c in story.chapters], ["Kabanata 1", "Kabanata 2"])
+        self.assertEqual(delta.plain_text(story.chapters[0].content), "Madilim ang gabi. Tahimik.\n")
+
+    def test_docx(self):
+        import docx
+
+        document = docx.Document()
+        document.add_paragraph("Word Story", style="Title")
+        document.add_heading("Opening", level=1)
+        paragraph = document.add_paragraph("Plain and ")
+        paragraph.add_run("bold").bold = True
+        document.add_heading("Second", level=1)
+        document.add_paragraph("Item", style="List Bullet")
+        buffer = io.BytesIO()
+        document.save(buffer)
+
+        story = import_manuscript("story.docx", buffer.getvalue())
+        self.assertEqual(story.title, "Word Story")
+        self.assertEqual([c.title for c in story.chapters], ["Opening", "Second"])
+        self.assertIn({"insert": "bold", "attributes": {"bold": True}}, story.chapters[0].content)
+        self.assertIn({"insert": "\n", "attributes": {"list": "bullet"}}, story.chapters[1].content)
+
+    def test_filename_fallback_title(self):
+        self.assertEqual(import_manuscript("my_first-story.txt", b"Hello").title, "My First Story")
+
+
+class ReaderPaywallTests(APITestCase):
+    def setUp(self):
+        self.reader = User.objects.create_user(email="r@example.com", password="x", email_verified=True)
+        self.genre = Genre.objects.create(name="Romance")
+        self.story = Story.objects.create(title="Paid", price=49, preview_page_count=2, status="published")
+        self.story.genres.add(self.genre)
+        Chapter.objects.create(story=self.story, title="One", order=0, content=doc("p1"))
+        Chapter.objects.create(story=self.story, title="Two", order=1, content=doc("p2", "p3"))
+        Chapter.objects.create(story=self.story, title="Three", order=2, content=doc("p4"))
+
+    def test_locked_preview_spans_chapters(self):
+        data = self.client.get(f"/api/stories/{self.story.slug}/").data
+        self.assertTrue(data["locked"])
+        chapters = data["chapters"]
+        self.assertEqual([c["title"] for c in chapters], ["One", "Two", "Three"])
+        self.assertFalse(chapters[0]["locked"])
+        self.assertEqual(delta.plain_text(chapters[1]["content"]), "p2\n")
+        self.assertTrue(chapters[1]["locked"])
+        self.assertIsNone(chapters[2]["content"])
+
+    def test_paid_subscription_unlocks(self):
+        Subscription.objects.create(user=self.reader, story=self.story, amount=49, status="paid")
+        self.client.force_authenticate(self.reader)
+        data = self.client.get(f"/api/stories/{self.story.slug}/").data
+        self.assertFalse(data["locked"])
+        self.assertEqual(delta.plain_text(data["chapters"][2]["content"]), "p4\n")
+
+    def test_public_column_is_free(self):
+        self.story.column = Column.objects.create(title="Editorial", is_public=True)
+        self.story.save()
+        self.assertFalse(self.client.get(f"/api/stories/{self.story.slug}/").data["locked"])
+
+    def test_drafts_hidden_from_readers(self):
+        draft = Story.objects.create(title="Secret", status="draft")
+        self.assertEqual(self.client.get(f"/api/stories/{draft.slug}/").status_code, 404)
+
+    def test_genre_filter_and_for_you(self):
+        Story.objects.create(title="Other", status="published")
+        listed = self.client.get("/api/stories/?genre=romance").data["results"]
+        self.assertEqual([s["slug"] for s in listed], [self.story.slug])
+        self.reader.preferred_genres.add(self.genre)
+        self.client.force_authenticate(self.reader)
+        home = self.client.get("/api/home/").data
+        self.assertEqual([s["slug"] for s in home["for_you"]], [self.story.slug])
+        self.assertEqual(home["by_genre"][0]["genre"]["slug"], "romance")
+
+
+class AdminStudioTests(APITestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(email="admin@example.com", password="x", is_admin=True)
+        self.client.force_authenticate(self.admin)
+        self.fantasy = Genre.objects.create(name="Fantasy")
+
+    def test_non_admin_forbidden(self):
+        reader = User.objects.create_user(email="r@example.com", password="x")
+        self.client.force_authenticate(reader)
+        self.assertEqual(self.client.get("/api/admin/stories/").status_code, 403)
+
+    def test_create_story_edit_chapters_and_publish(self):
+        response = self.client.post(
+            "/api/admin/stories/",
+            {"title": "Bagong Kwento", "genre_ids": [self.fantasy.id], "price": "49.00", "preview_page_count": 2},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        story_id = response.data["id"]
+        chapter = response.data["chapters"][0]
+        self.assertEqual(response.data["genres"][0]["slug"], "fantasy")
+
+        self.assertEqual(self.client.post(f"/api/admin/stories/{story_id}/publish/").status_code, 400)
+
+        saved = self.client.patch(
+            f"/api/admin/chapters/{chapter['id']}/",
+            {"content": doc("Once upon a time"), "revision": chapter["revision"]},
+            format="json",
+        )
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(saved.data["revision"], 2)
+        stale = self.client.patch(
+            f"/api/admin/chapters/{chapter['id']}/", {"title": "x", "revision": 1}, format="json"
+        )
+        self.assertEqual(stale.status_code, 409)
+
+        second = self.client.post(f"/api/admin/stories/{story_id}/chapters/", {"title": "Prologue", "order": 0}, format="json")
+        self.assertEqual(second.status_code, 201)
+        titles = [c["title"] for c in self.client.get(f"/api/admin/stories/{story_id}/chapters/").data]
+        self.assertEqual(titles, ["Prologue", "Chapter 1"])
+
+        reordered = self.client.post(
+            f"/api/admin/stories/{story_id}/chapters/reorder/", {"order": [chapter["id"], second.data["id"]]}, format="json"
+        )
+        self.assertEqual([c["title"] for c in reordered.data], ["Chapter 1", "Prologue"])
+
+        published = self.client.post(f"/api/admin/stories/{story_id}/publish/")
+        self.assertEqual(published.data["status"], "published")
+        self.assertEqual(published.data["word_count"], 4)
+
+    def test_price_below_paymongo_minimum_rejected(self):
+        response = self.client.post("/api/admin/stories/", {"title": "Cheap", "price": "5"}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_bulk_import_with_genre_tagging(self):
+        horror = Genre.objects.create(name="Horror")
+        files = [
+            SimpleUploadedFile("one.md", b"---\ntitle: Una\ngenres: Fantasy, Nonexistent\n---\n# Ch\n\nHello world."),
+            SimpleUploadedFile("two.txt", b"Chapter 1\n\nText here."),
+            SimpleUploadedFile("bad.pdf", b"%PDF"),
+        ]
+        manifest = [{"filename": "two.txt", "title": "Pangalawa", "genre_ids": [horror.id], "price": "25"}]
+        response = self.client.post(
+            "/api/admin/stories/import/",
+            {"files": files, "genre_ids": str(self.fantasy.id), "manifest": json.dumps(manifest), "preview_page_count": "1"},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual((response.data["created"], response.data["failed"]), (2, 1))
+        one, two, bad = response.data["results"]
+        self.assertEqual(one["title"], "Una")
+        self.assertEqual(one["genres"], ["Fantasy"])
+        self.assertIn("Nonexistent", one["warnings"][0])
+        self.assertEqual(two["title"], "Pangalawa")
+        self.assertEqual(two["genres"], ["Horror"])
+        self.assertFalse(bad["ok"])
+
+        story = Story.objects.get(pk=two["story_id"])
+        self.assertEqual(story.price, 25)
+        self.assertEqual(story.preview_page_count, 1)
+        self.assertEqual(story.status, "draft")
+        self.assertEqual(story.chapters.get().title, "Chapter 1")
+
+
+class ViewCountTests(APITestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        self.story = Story.objects.create(title="Popular", status="published")
+        self.reader = User.objects.create_user(email="r@example.com", password="x", email_verified=True)
+
+    def view(self, **headers):
+        return self.client.post(f"/api/stories/{self.story.slug}/view/", **headers)
+
+    def test_one_view_per_reader_per_day_and_distinct_readers(self):
+        guest = {"HTTP_X_VIEWER_ID": "a1b2c3d4-e5f6-4711-8899-aabbccddeeff"}
+        self.assertEqual(self.view(**guest).data, {"view_count": 1, "reader_count": 1})
+        self.assertEqual(self.view(**guest).data, {"view_count": 1, "reader_count": 1})  # same day, same reader
+
+        self.client.force_authenticate(self.reader)
+        self.assertEqual(self.view().data, {"view_count": 2, "reader_count": 2})
+
+        # The next day the same reader adds a view but not a new reader.
+        from .models import StoryView
+
+        StoryView.objects.filter(user=self.reader).update(date="2000-01-01")
+        self.assertEqual(self.view().data, {"view_count": 3, "reader_count": 2})
+
+        detail = self.client.get(f"/api/stories/{self.story.slug}/").data
+        self.assertEqual((detail["view_count"], detail["reader_count"]), (3, 2))
+        stats = self.client.get("/api/stats/").data
+        self.assertEqual(stats["total_readers"], 2)
+        self.assertEqual(stats["total_views"], 3)
+
+    def test_admin_previews_are_not_counted(self):
+        admin = User.objects.create_user(email="a@example.com", password="x", is_admin=True)
+        self.client.force_authenticate(admin)
+        self.assertEqual(self.view().data, {"view_count": 0, "reader_count": 0})
+
+    def test_drafts_cannot_be_viewed(self):
+        draft = Story.objects.create(title="Hidden", status="draft")
+        self.assertEqual(self.client.post(f"/api/stories/{draft.slug}/view/").status_code, 404)
+
+    def test_reading_mode_preference(self):
+        self.client.force_authenticate(self.reader)
+        response = self.client.patch("/api/user/me/", {"reading_mode": "book"}, format="json")
+        self.assertEqual(response.data["reading_mode"], "book")
+        self.assertEqual(self.client.patch("/api/user/me/", {"reading_mode": "scroll3d"}, format="json").status_code, 400)

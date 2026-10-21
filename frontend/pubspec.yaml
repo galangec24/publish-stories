@@ -1,0 +1,33 @@
+name: story_app
+description: Story Platform reader and admin studio (Web, Windows, Android, iOS).
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  provider: ^6.1.2
+  http: ^1.2.2
+  flutter_secure_storage: ^9.2.2
+  google_sign_in: ^6.2.2
+  google_sign_in_web: ^0.12.4
+  url_launcher: ^6.3.1
+  flutter_quill: ^11.4.0
+  file_picker: ^8.1.2
+  crypto: ^3.0.5
+  web: ^1.1.0
+  ffi: ^2.1.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

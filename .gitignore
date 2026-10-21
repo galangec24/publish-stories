@@ -1,0 +1,13 @@
+.env
+*.pyc
+__pycache__/
+.venv/
+db.sqlite3
+media/
+staticfiles/
+.dart_tool/
+build/
+.firebase/
+*.keystore
+*.jks
+key.properties

@@ -1,0 +1,72 @@
+// Renders a Quill Delta (the format the Story Studio saves) as React elements.
+// Built from elements rather than innerHTML so story text can never inject markup.
+
+function splitLines(ops) {
+  const lines = []
+  let runs = []
+  for (const op of ops || []) {
+    const { insert, attributes } = op
+    if (typeof insert !== 'string') continue // embeds are not used by the Studio
+    const parts = insert.split('\n')
+    parts.forEach((part, i) => {
+      if (part) runs.push({ text: part, attrs: attributes || {} })
+      if (i < parts.length - 1) {
+        lines.push({ runs, block: attributes || {} })
+        runs = []
+      }
+    })
+  }
+  if (runs.length) lines.push({ runs, block: {} })
+  return lines
+}
+
+function Run({ text, attrs }) {
+  let node = text
+  if (attrs.bold) node = <strong>{node}</strong>
+  if (attrs.italic) node = <em>{node}</em>
+  if (attrs.underline) node = <u>{node}</u>
+  if (attrs.strike) node = <s>{node}</s>
+  if (typeof attrs.link === 'string' && /^https?:\/\//.test(attrs.link)) {
+    node = (
+      <a href={attrs.link} target="_blank" rel="noreferrer noopener" className="text-brand underline">
+        {node}
+      </a>
+    )
+  }
+  return node
+}
+
+function Line({ line }) {
+  const { header, blockquote, align } = line.block
+  const style = align ? { textAlign: align } : undefined
+  const content = line.runs.length ? line.runs.map((r, i) => <Run key={i} {...r} />) : <br />
+  if (header === 1) return <h1 style={style}>{content}</h1>
+  if (header === 2) return <h2 style={style}>{content}</h2>
+  if (header === 3) return <h3 style={style}>{content}</h3>
+  if (blockquote) return <blockquote style={style}>{content}</blockquote>
+  return <p style={style}>{content}</p>
+}
+
+export function DeltaView({ ops }) {
+  const lines = splitLines(ops)
+  const blocks = []
+  for (let i = 0; i < lines.length; i++) {
+    const list = lines[i].block.list
+    if (list === 'bullet' || list === 'ordered') {
+      const items = []
+      while (i < lines.length && lines[i].block.list === list) {
+        items.push(<li key={i}>{lines[i].runs.map((r, j) => <Run key={j} {...r} />)}</li>)
+        i++
+      }
+      i--
+      blocks.push(list === 'bullet' ? <ul key={`l${i}`}>{items}</ul> : <ol key={`l${i}`}>{items}</ol>)
+    } else if (lines[i].runs.length || lines[i].block.header) {
+      blocks.push(<Line key={i} line={lines[i]} />)
+    }
+  }
+  return <div className="prose-story">{blocks}</div>
+}
+
+export function wordCount(text) {
+  return (text.match(/\S+/g) || []).length
+}

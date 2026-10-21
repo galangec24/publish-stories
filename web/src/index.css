@@ -1,0 +1,189 @@
+@import "tailwindcss";
+
+/* Theme tokens. <html data-theme="light|dark|sepia"> follows the reader's account setting. */
+:root,
+[data-theme="dark"] {
+  --bg: #0e0b1a;
+  --bg-2: #171329;
+  --surface: #1d1834;
+  --surface-2: #272043;
+  --ink: #f3eefe;
+  --muted: #a39cc0;
+  --line: #352d57;
+  --accent: #f5b942;
+  --accent-ink: #1b1305;
+  --brand: #8b6cff;
+  --page: #1a1630;
+  --page-ink: #ece6fb;
+  --glow: rgba(139, 108, 255, 0.35);
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #f7f5fc;
+  --bg-2: #eeeaf8;
+  --surface: #ffffff;
+  --surface-2: #f1eefa;
+  --ink: #1b1630;
+  --muted: #6b6488;
+  --line: #e0daf0;
+  --accent: #d9921a;
+  --accent-ink: #ffffff;
+  --brand: #6a4ff0;
+  --page: #ffffff;
+  --page-ink: #1f1a33;
+  --glow: rgba(106, 79, 240, 0.18);
+  color-scheme: light;
+}
+
+[data-theme="sepia"] {
+  --bg: #efe4cc;
+  --bg-2: #e6d8ba;
+  --surface: #f7eedb;
+  --surface-2: #ecdfc2;
+  --ink: #4a3626;
+  --muted: #86705a;
+  --line: #d8c6a2;
+  --accent: #a8612a;
+  --accent-ink: #fff8ec;
+  --brand: #8a5a3b;
+  --page: #fbf4e4;
+  --page-ink: #4a3626;
+  --glow: rgba(168, 97, 42, 0.2);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-brand: var(--brand);
+  --color-page: var(--page);
+  --color-page-ink: var(--page-ink);
+  --font-display: "Fraunces", Georgia, serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-read: "Literata", Georgia, serif;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Soft aurora behind every page, gives depth to the 3D cards. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -20% -10% auto -10%;
+  height: 70vh;
+  background: radial-gradient(60% 60% at 20% 30%, var(--glow), transparent 70%),
+    radial-gradient(40% 50% at 80% 10%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
+  filter: blur(40px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Reusable component classes (Tailwind v4 custom utilities so they can be @applied and take variants). */
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition
+    disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-accent text-accent-ink shadow-lg shadow-accent/20 hover:-translate-y-0.5 hover:shadow-accent/40;
+}
+@utility btn-ghost {
+  @apply btn border border-line bg-surface/60 text-ink hover:bg-surface-2;
+}
+@utility input {
+  @apply w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-ink outline-none transition
+    placeholder:text-muted focus:border-brand focus:ring-2 focus:ring-brand/30;
+}
+@utility card {
+  @apply rounded-2xl border border-line bg-surface/80 shadow-xl shadow-black/10 backdrop-blur;
+}
+@utility chip {
+  @apply inline-flex cursor-pointer select-none items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition;
+}
+
+/* --- 3D book cover ----------------------------------------------------- */
+.book-3d {
+  transform-style: preserve-3d;
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.book-3d .spine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 18px;
+  transform: rotateY(-90deg) translateX(-9px) translateZ(9px);
+  transform-origin: left;
+  filter: brightness(0.7);
+}
+.book-3d .pages {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  right: 0;
+  width: 16px;
+  transform: rotateY(90deg) translateX(8px) translateZ(-8px);
+  transform-origin: right;
+  background: repeating-linear-gradient(90deg, #f6ecd6 0 2px, #e2d3b2 2px 3px);
+}
+.book-3d .gloss {
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.28), transparent 38%, transparent 70%, rgba(0, 0, 0, 0.18));
+}
+
+/* --- Reader typography (Delta renderer output) ------------------------- */
+.prose-story {
+  font-family: var(--font-read);
+  color: var(--page-ink);
+  font-size: 1.125rem;
+  line-height: 1.85;
+}
+.prose-story p { margin: 0 0 1.1em; }
+.prose-story h1 { font-family: var(--font-display); font-size: 1.9rem; margin: 1.2em 0 0.5em; }
+.prose-story h2 { font-family: var(--font-display); font-size: 1.5rem; margin: 1.1em 0 0.4em; }
+.prose-story h3 { font-family: var(--font-display); font-size: 1.25rem; margin: 1em 0 0.4em; }
+.prose-story blockquote { border-left: 3px solid var(--accent); padding-left: 1em; font-style: italic; opacity: 0.9; margin: 0 0 1.1em; }
+.prose-story ul { list-style: disc; padding-left: 1.5em; margin: 0 0 1.1em; }
+.prose-story ol { list-style: decimal; padding-left: 1.5em; margin: 0 0 1.1em; }
+
+/* --- Protected content -------------------------------------------------- */
+body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+@media print { body.protected { display: none !important; } }
+
+/* --- Quill editor (Story Studio) ---------------------------------------- */
+.studio-page .ql-container { font-family: var(--font-read); font-size: 1.1rem; border: none !important; }
+.studio-page .ql-editor { min-height: 60vh; padding: 0; line-height: 1.8; color: var(--page-ink); }
+.studio-page .ql-editor.ql-blank::before { color: var(--muted); font-style: italic; left: 0; }
+.studio-page .ql-editor h1, .studio-page .ql-editor h2, .studio-page .ql-editor h3 { font-family: var(--font-display); }
+.studio-page .ql-editor blockquote { border-left: 3px solid var(--accent); padding-left: 1em; }
+
+@keyframes float-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+.animate-float-up { animation: float-up 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+/* Page-turn sheen for the book reading mode */
+@keyframes page-turn-next {
+  from { transform: rotateY(0deg); opacity: 0.9; }
+  to { transform: rotateY(-75deg); opacity: 0; }
+}
+@keyframes page-turn-prev {
+  from { transform: rotateY(0deg); opacity: 0.9; }
+  to { transform: rotateY(75deg); opacity: 0; }
+}
+/* Book mode: keep headings and short blocks from splitting across pages */
+.book-flow h1, .book-flow h2, .book-flow h3, .book-flow blockquote { break-inside: avoid; break-after: avoid; }
+.book-flow p { orphans: 2; widows: 2; }

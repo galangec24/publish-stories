@@ -1,0 +1,1 @@
+void setExcludedFromCapture(bool enabled) {}
