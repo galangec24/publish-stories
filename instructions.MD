@@ -248,7 +248,7 @@ Each user has a `UserTheme` record (`light`, `dark` or `sepia`). The app reads i
 | Piece | Host | Why |
 |---|---|---|
 | Django API | **Render** (Web Service, Singapore region) | Runs Python and gunicorn natively, deploys from Git, and handles TLS. Firebase can't run Django directly; it would need Cloud Run, which is more work. |
-| PostgreSQL | **Render Postgres** | Managed, same region as the API, and wired in automatically by `render.yaml`. |
+| PostgreSQL | **Supabase** (Singapore) | The free database doesn't expire (Render's free one is deleted after 30 days) and has a built-in table editor. The API connects through Supabase's Session pooler. |
 | React PWA (`web/`) | **Firebase Hosting** | A global CDN with a generous free tier, HTTPS (which PWAs require), instant rollbacks, SPA rewrites and a custom domain. |
 | Cover images | **Firebase Storage** (a Google Cloud Storage bucket) | Render's disk is wiped on every deploy. Set `GS_BUCKET_NAME` and Django stores uploads there through `django-storages`. |
 | Email | Brevo | Transactional API |
@@ -256,11 +256,12 @@ Each user has a `UserTheme` record (`light`, `dark` or `sepia`). The app reads i
 
 **Backend (Render)**
 
-1. Push the repo to GitHub, then in Render choose **New → Blueprint** and select the repo. `render.yaml` creates the database and the API service. On start-up the service runs migrations and `seed_genres`, then starts gunicorn.
-2. In the dashboard, fill in the `sync: false` secrets: Google client IDs, Brevo key, PayMongo keys, and the bucket name.
-3. Upload the Firebase service-account JSON as a **Secret File** named `gcs.json`.
-4. Update `DJANGO_ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS` and `FRONTEND_BASE_URL` to the real domains.
-5. Create the first admin with `python manage.py createsuperuser` from the Render shell.
+1. Create the Supabase database first (see 11.1) and copy its Session pooler connection string.
+2. In Render choose **New → Blueprint** and select the repo. `render.yaml` creates the API service.
+3. When prompted, paste the Supabase string into `DATABASE_URL`, and set `ADMIN_EMAIL` and `ADMIN_PASSWORD` for the first admin account.
+4. Fill in the other prompted secrets (Google client IDs, Brevo, PayMongo), or enter `none` for now and update them later in **Environment**.
+5. On every start the service runs `migrate`, `seed_genres` and `ensure_admin` (which creates or promotes the `ADMIN_EMAIL` account, since free instances have no shell), then starts gunicorn.
+6. Later, in the **Environment** tab, add `GOOGLE_DESKTOP_CLIENT_ID` and `GOOGLE_DESKTOP_CLIENT_SECRET` for Windows sign-in. For cover images, add `GS_BUCKET_NAME` plus a **Secret File** `gcs.json` with `GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/gcs.json`.
 
 **Web (Firebase Hosting)**
 
@@ -289,11 +290,21 @@ Add the Firebase domain to the **Authorized JavaScript origins** of the Google w
 - **iOS** ships through App Store Connect. It needs an Apple Developer membership, a bundle ID matching the App ID, automatic signing, and the reversed iOS client ID added as a URL scheme in `Info.plist`.
 - **Windows** ships as MSIX (`msix` package) to the Microsoft Store through Partner Center, which signs it. Direct `.exe` distribution shows "Unknown Publisher" without a code-signing certificate.
 
-**Free-tier caveat.** Render's free web services sleep after inactivity, and the first request then takes about 30 seconds. Free Postgres is deleted 30 days after creation. Before launch, switch to `plan: starter` (API) and `plan: basic-256mb` (database), and move the migrate step back into `preDeployCommand`.
+**Free-tier caveats.**
+- **Render:** the free API sleeps after about 15 minutes idle, and the next request takes 30–60 seconds. Before taking real payments, switch to `plan: starter` and move the migrate step into `preDeployCommand`.
+- **Supabase:** free projects pause after about 7 days without activity. Click **Restore** in the Supabase dashboard to resume, or use the Pro plan for production.
 
 ### 11.1 PostgreSQL
 
-- **Production:** nothing to install. The `render.yaml` blueprint creates the managed `story-db` database in Singapore and injects its connection string into the API as `DATABASE_URL`. Tables are created by `migrate` when the service starts. Backups, version upgrades and TLS are handled by Render. Connect from your PC with the **External Database URL** shown in the Render dashboard, using psql, pgAdmin or DBeaver.
+- **Production (Supabase):**
+  1. At supabase.com, create a **New project** in region **Southeast Asia (Singapore)**. Use a database password without `@ : / ?`, or URL-encode those characters.
+  2. Click **Connect**, choose **Session pooler**, and copy the URI.
+     - **Don't use** "Direct connection": it is IPv6-only, and Render can't reach it.
+     - **Don't use** the Transaction pooler on port 6543: it doesn't suit Django's persistent connections.
+  3. Append `?sslmode=require`, giving: `postgresql://postgres.<ref>:<password>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require`
+  4. Paste it as `DATABASE_URL` in Render. Django creates the tables with `migrate` on start-up.
+  5. Browse the data with Supabase's **Table Editor**, or with pgAdmin (same host, port 5432, database `postgres`, user `postgres.<ref>`, SSL mode `require`).
+  6. Django manages the schema, so change tables through migrations, not in the Supabase UI. **Turn off Supabase's Data API** (Project Settings → Data API → disable). The app talks only to Django, and otherwise Supabase would expose Django's tables (users, payments) through its auto-generated REST API with Row Level Security off. The Security Advisor will flag "RLS disabled" until you do.
 - **Local, option 1 (simplest):** leave `DATABASE_URL` unset and Django uses SQLite. Good enough for development and the tests.
 - **Local, option 2 (Docker):** `docker compose up -d` in `backend/` starts Postgres 16 with database, user and password all set to `story`.
 - **Local, option 3 (native Windows):** install PostgreSQL from postgresql.org/download/windows, then in **SQL Shell (psql)** run:

@@ -1,14 +1,8 @@
-# Render Blueprint: Django API + managed PostgreSQL.
+# Render Blueprint: Django API. The PostgreSQL database is hosted on Supabase
+# (paste its Session pooler connection string as DATABASE_URL when prompted).
 # The React website (web/) is deployed separately to Firebase Hosting (web/firebase.json).
-# FREE PLANS: the API sleeps when idle and the free database expires after 30 days.
-# Before going live switch to plan: starter / basic-256mb and move migrate into preDeployCommand.
-databases:
-  - name: story-db
-    plan: free
-    region: singapore
-    databaseName: story
-    user: story
-
+# FREE PLAN: the API sleeps when idle. Before going live switch to plan: starter
+# and move migrate into preDeployCommand.
 services:
   - type: web
     name: story-api
@@ -28,10 +22,10 @@ services:
         sync: false
       - key: PYTHON_VERSION
         value: "3.13.1"
+      # Supabase → Connect → Session pooler, with ?sslmode=require appended:
+      # postgresql://postgres.<ref>:<password>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require
       - key: DATABASE_URL
-        fromDatabase:
-          name: story-db
-          property: connectionString
+        sync: false
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: DJANGO_DEBUG
