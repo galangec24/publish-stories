@@ -1,5 +1,5 @@
 # Render Blueprint: Django API + managed PostgreSQL.
-# The Flutter web build is deployed separately to Firebase Hosting (frontend/firebase.json).
+# The React website (web/) is deployed separately to Firebase Hosting (web/firebase.json).
 # FREE PLANS: the API sleeps when idle and the free database expires after 30 days.
 # Before going live switch to plan: starter / basic-256mb and move migrate into preDeployCommand.
 databases:
@@ -18,9 +18,14 @@ services:
     rootDir: backend
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
     # Free plans don't run preDeployCommand, so migrations run at start-up.
-    startCommand: python manage.py migrate --noinput && python manage.py seed_genres && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    startCommand: python manage.py migrate --noinput && python manage.py seed_genres && python manage.py ensure_admin && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 60
     healthCheckPath: /api/genres/
     envVars:
+      # First admin account (free plans have no shell for createsuperuser).
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
       - key: PYTHON_VERSION
         value: "3.13.1"
       - key: DATABASE_URL
@@ -40,10 +45,6 @@ services:
       # Secrets: set these in the Render dashboard, never in this file.
       - key: GOOGLE_CLIENT_IDS
         sync: false
-      - key: GOOGLE_DESKTOP_CLIENT_ID
-        sync: false
-      - key: GOOGLE_DESKTOP_CLIENT_SECRET
-        sync: false
       - key: BREVO_API_KEY
         sync: false
       - key: BREVO_SENDER_EMAIL
@@ -54,7 +55,6 @@ services:
         sync: false
       - key: PAYMONGO_LIVE_MODE
         value: "False"
-      - key: GS_BUCKET_NAME
-        sync: false
-      - key: GOOGLE_APPLICATION_CREDENTIALS
-        value: /etc/secrets/gcs.json
+      # Add later in the Environment tab when needed (not prompted on first deploy):
+      #   GOOGLE_DESKTOP_CLIENT_ID / GOOGLE_DESKTOP_CLIENT_SECRET  (Windows app sign-in)
+      #   GS_BUCKET_NAME + GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/gcs.json  (cover images in Firebase Storage)
