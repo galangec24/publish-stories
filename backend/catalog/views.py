@@ -141,7 +141,7 @@ class HomeView(APIView):
 
         genres = Genre.objects.filter(is_active=True).annotate(
             published=Count("stories", filter=Q(stories__status=Story.Status.PUBLISHED))
-        )
+        ).order_by("sort_order", "name")  # Meta.ordering is dropped from GROUP BY queries
         by_genre = [
             {"genre": GenreSerializer(genre).data, "stories": shelf(stories.filter(genres=genre))}
             for genre in genres
