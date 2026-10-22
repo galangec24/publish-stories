@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { AboutMe } from '../components/AboutMe'
+import { AuthorBlog } from '../components/AuthorBlog'
 import { Book3D, Shelf } from '../components/Book3D'
 import { Spinner } from '../components/ui'
 import { api } from '../lib/api'
@@ -163,6 +164,7 @@ export function Home() {
         </>
       )}
 
+      <AuthorBlog stats={data?.stats} />
       <AboutMe />
     </>
   )

@@ -44,18 +44,21 @@ export function AboutMe() {
           <div className="mx-auto w-64 [perspective:1000px] sm:w-72 md:w-full" onMouseMove={onMove} onMouseLeave={() => (frame.current.style.transform = '')}>
             <div ref={frame} className="relative transition-transform duration-300 ease-out [transform-style:preserve-3d]">
               <div className="absolute inset-0 translate-x-4 translate-y-4 rounded-3xl bg-gradient-to-br from-accent/60 to-brand/60 [transform:translateZ(-30px)]" />
-              <picture>
-                <source srcSet="/about/maria-gemima-valderrama.webp" type="image/webp" />
-                <img
-                  src="/about/maria-gemima-valderrama.jpg"
-                  alt="Maria Gemima Valderrama"
-                  loading="lazy"
-                  width="640"
-                  height="822"
-                  className="relative aspect-[4/5] w-full rounded-3xl object-cover object-[50%_30%] shadow-2xl shadow-black/40"
-                />
-              </picture>
-              <div className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-tr from-transparent via-transparent to-white/15" />
+              {/* White mat so the white-background portrait reads as a photo print in every theme */}
+              <div className="relative rounded-3xl bg-white p-2 shadow-2xl shadow-black/40 ring-1 ring-black/5">
+                <picture>
+                  <source srcSet="/about/maria-gemima-valderrama.webp" type="image/webp" />
+                  <img
+                    src="/about/maria-gemima-valderrama.jpg"
+                    alt="Maria Gemima Valderrama"
+                    loading="lazy"
+                    decoding="async"
+                    width="798"
+                    height="1024"
+                    className="block aspect-[798/1024] w-full rounded-2xl bg-white object-contain"
+                  />
+                </picture>
+              </div>
             </div>
           </div>
 
