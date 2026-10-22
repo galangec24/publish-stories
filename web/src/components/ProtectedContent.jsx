@@ -80,7 +80,7 @@ export function ProtectedContent({ watermark, children }) {
 function Watermark({ text }) {
   const tiles = Array.from({ length: 60 })
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden select-none" aria-hidden>
+    <div className="notranslate pointer-events-none absolute inset-0 overflow-hidden select-none" translate="no" aria-hidden>
       <div className="grid -rotate-[22deg] grid-cols-3 gap-x-10 gap-y-24 opacity-[0.06] [width:140%] [margin-left:-20%]">
         {tiles.map((_, i) => (
           <span key={i} className="whitespace-nowrap text-sm font-semibold text-page-ink">

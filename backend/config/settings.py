@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "accounts",
     "catalog",
     "payments",
+    "translations",
 ]
 
 MIDDLEWARE = [
@@ -148,6 +149,7 @@ REST_FRAMEWORK = {
         "auth": "20/min",
         "otp": "10/hour",
         "views": "300/hour",
+        "translate": "600/hour",
     },
 }
 
@@ -177,6 +179,10 @@ OTP_MAX_ATTEMPTS = int(os.environ.get("OTP_MAX_ATTEMPTS", "5"))
 OTP_RESEND_COOLDOWN_SECONDS = 60
 
 # PayMongo
+# Live translator (web app). Without a Google key the free MyMemory service is used.
+GOOGLE_TRANSLATE_API_KEY = os.environ.get("GOOGLE_TRANSLATE_API_KEY", "")
+MYMEMORY_EMAIL = os.environ.get("MYMEMORY_EMAIL", "")
+
 PAYMONGO_SECRET_KEY = os.environ.get("PAYMONGO_SECRET_KEY", "")
 PAYMONGO_WEBHOOK_SECRET = os.environ.get("PAYMONGO_WEBHOOK_SECRET", "")
 PAYMONGO_LIVE_MODE = env_bool("PAYMONGO_LIVE_MODE", False)

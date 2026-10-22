@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { AboutMe } from '../components/AboutMe'
 import { Book3D, Shelf } from '../components/Book3D'
 import { Spinner } from '../components/ui'
 import { api } from '../lib/api'
@@ -82,6 +83,9 @@ export function Home() {
                 Create free account
               </Link>
             )}
+            <a href="#about" className="btn-ghost">
+              Meet the author
+            </a>
           </div>
         </div>
         <div className="relative h-[340px] sm:h-[420px]">
@@ -158,6 +162,8 @@ export function Home() {
           )}
         </>
       )}
+
+      <AboutMe />
     </>
   )
 }

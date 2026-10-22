@@ -1,11 +1,20 @@
+import { useEffect } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 
+import { LanguagePicker } from '../i18n/LanguagePicker'
 import { useAuth } from '../lib/auth'
 import { InstallButton } from '../pwa/InstallPrompt'
 
 export function Layout() {
   const { user, isAdmin } = useAuth()
-  const { pathname } = useLocation()
+  const { pathname, hash } = useLocation()
+
+  // In-page links such as /#about: scroll once the target has rendered.
+  useEffect(() => {
+    if (!hash) return
+    const id = requestAnimationFrame(() => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth' }))
+    return () => cancelAnimationFrame(id)
+  }, [pathname, hash])
   // The Studio is a full-screen workspace with its own chrome.
   const bare = /^\/admin\/stories\/\d+/.test(pathname)
 
@@ -16,11 +25,15 @@ export function Layout() {
           <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4">
             <Link to="/" className="flex items-center gap-2.5">
               <img src="/icon.svg" alt="" className="h-9 w-9 rounded-xl shadow-lg shadow-brand/30" />
-              <span className="font-display text-xl tracking-tight">
+              <span className="notranslate font-display text-xl tracking-tight" translate="no">
                 Publish <span className="text-accent">Stories</span>
               </span>
             </Link>
             <nav className="ml-auto flex items-center gap-2">
+              <Link to="/#about" className="hidden px-2 text-sm text-muted hover:text-ink md:inline">
+                About
+              </Link>
+              <LanguagePicker />
               <InstallButton />
               {isAdmin && (
                 <NavLink to="/admin" className="btn-ghost !px-3 !py-1.5">
