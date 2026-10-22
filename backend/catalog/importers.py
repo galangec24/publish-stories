@@ -60,10 +60,14 @@ class _Builder:
 
     def __init__(self, split):
         self.split = split
-        self.chapters = [["", []]]
+        self.chapters = [["", [], 0]]  # [title, paragraphs, pictures counted but not stored]
 
     def start_chapter(self, title):
-        self.chapters.append([title.strip(), []])
+        self.chapters.append([title.strip(), [], 0])
+
+    def note_image(self):
+        """A picture seen during a preview: counted, not inserted."""
+        self.chapters[-1][2] += 1
 
     def add(self, runs, block_attrs=None):
         self.chapters[-1][1].append((runs, block_attrs))
@@ -85,18 +89,18 @@ class _Builder:
             self.add(runs, block_attrs)
 
     def page_break(self):
-        if self.split == "page_breaks" and self.chapters[-1][1]:
+        if self.split == "page_breaks" and (self.chapters[-1][1] or self.chapters[-1][2]):
             self.start_chapter("")
 
     def build(self):
         result = []
-        for title, paragraphs in self.chapters:
-            has_content = any(
+        for title, paragraphs, counted in self.chapters:
+            has_content = counted or any(
                 isinstance(text, dict) or text.strip() for runs, _ in paragraphs for text, _ in runs
             )
             if not has_content and not title:
                 continue
-            images = sum(1 for runs, _ in paragraphs for text, _ in runs if isinstance(text, dict))
+            images = counted + sum(1 for runs, _ in paragraphs for text, _ in runs if isinstance(text, dict))
             result.append(ImportedChapter(title=title, content=delta.paragraphs_to_ops(paragraphs), images=images))
         for n, chapter in enumerate(result, start=1):
             chapter.title = chapter.title or f"Chapter {n}"
@@ -203,7 +207,10 @@ def _import_docx(data, split, save_image):
                 if images_seen >= MAX_IMAGES or rel_id not in parts:
                     continue
                 images_seen += 1
-                url = save_image(parts[rel_id].blob) if save_image else "about:blank#preview"
+                if save_image is None:
+                    pictures.append(None)  # preview: count only
+                    continue
+                url = save_image(parts[rel_id].blob)
                 if url:
                     pictures.append(url)
             if _run_has_page_break(run):
@@ -213,7 +220,10 @@ def _import_docx(data, split, save_image):
             builder.paragraph(runs, block, text if not block else "")
         # Pictures go on their own centred line after the paragraph's text.
         for url in pictures:
-            builder.add([({"image": url}, None)], {"align": "center"})
+            if url is None:
+                builder.note_image()
+            else:
+                builder.add([({"image": url}, None)], {"align": "center"})
         if breaks_after:
             builder.page_break()
     story.chapters = builder.build()

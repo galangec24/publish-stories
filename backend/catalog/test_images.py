@@ -145,3 +145,17 @@ class ImportOneTests(APITestCase):
         response = self.post(story=json.dumps({"font_size": 99}))
         self.assertEqual(response.status_code, 400)
         self.assertEqual((Story.objects.count(), StoryImage.objects.count()), (0, 0))
+
+
+class BulkImportPictureTests(APITestCase):
+    def test_bulk_import_keeps_word_pictures(self):
+        admin = User.objects.create_user(email="a@example.com", password="x", is_admin=True)
+        self.client.force_authenticate(admin)
+        response = self.client.post(
+            "/api/admin/stories/import/", {"files": [SimpleUploadedFile("book.docx", docx_with_picture())]}, format="multipart"
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        ops = [op for c in Story.objects.get().chapters.all() for op in c.content]
+        images = [op["insert"]["image"] for op in ops if isinstance(op["insert"], dict)]
+        self.assertEqual(len(images), 1)
+        self.assertIn("/api/media/images/", images[0])

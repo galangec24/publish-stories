@@ -254,8 +254,16 @@ class AdminStoryImportView(APIView):
                 return result
             options.update(parsed.validated_data)
 
+        from .images import InvalidImage, image_url, store_image
+
+        def save_image(blob):
+            try:
+                return image_url(self.request, store_image(blob, self.request.user))
+            except InvalidImage:
+                return None
+
         try:
-            manuscript = import_manuscript(upload.name, upload.read())
+            manuscript = import_manuscript(upload.name, upload.read(), save_image=save_image)
         except ManuscriptError as exc:
             result["error"] = str(exc)
             return result
