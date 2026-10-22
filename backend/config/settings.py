@@ -191,7 +191,7 @@ if GOOGLE_DESKTOP_CLIENT_ID and GOOGLE_DESKTOP_CLIENT_ID not in GOOGLE_CLIENT_ID
 # Brevo transactional email
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
 BREVO_SENDER_EMAIL = os.environ.get("BREVO_SENDER_EMAIL", "no-reply@example.com")
-BREVO_SENDER_NAME = os.environ.get("BREVO_SENDER_NAME", "Story Platform")
+BREVO_SENDER_NAME = os.environ.get("BREVO_SENDER_NAME", "Publish Stories")
 BREVO_VERIFY_TEMPLATE_ID = os.environ.get("BREVO_VERIFY_TEMPLATE_ID", "")
 BREVO_RESET_TEMPLATE_ID = os.environ.get("BREVO_RESET_TEMPLATE_ID", "")
 OTP_TTL_MINUTES = int(os.environ.get("OTP_TTL_MINUTES", "10"))
