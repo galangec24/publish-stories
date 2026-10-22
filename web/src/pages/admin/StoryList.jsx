@@ -1,3 +1,4 @@
+import { Eye, Library, UsersRound } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
@@ -47,13 +48,13 @@ export function StoryList() {
       {stats.data && (
         <div className="mt-5 grid grid-cols-3 gap-3">
           {[
-            ['👥', stats.data.total_readers, 'Total readers'],
-            ['👁', stats.data.total_views, 'Total views'],
-            ['📚', stats.data.published_stories, 'Published'],
-          ].map(([icon, n, label]) => (
+            [UsersRound, stats.data.total_readers, 'Total readers'],
+            [Eye, stats.data.total_views, 'Total views'],
+            [Library, stats.data.published_stories, 'Published'],
+          ].map(([Icon, n, label]) => (
             <div key={label} className="card p-4">
-              <p className="font-display text-3xl">
-                <span className="mr-1.5 text-lg">{icon}</span>
+              <p className="flex items-center gap-2 font-display text-3xl">
+                <Icon className="h-6 w-6 text-brand" />
                 {formatCount(n)}
               </p>
               <p className="mt-1 text-xs tracking-wide text-muted uppercase">{label}</p>

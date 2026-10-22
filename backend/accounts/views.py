@@ -29,11 +29,11 @@ def issue_tokens(user, **extra):
     return {"access": str(refresh.access_token), "refresh": str(refresh), "user": s.UserSerializer(user).data, **extra}
 
 
-def send_code(user, purpose):
+def send_code(user, purpose, to_email=None):
     """Issue an OTP and email it through Brevo. Returns whether the email went out."""
     _, code = EmailOTP.issue(user, purpose)
     try:
-        send_otp_email(user, purpose, code)
+        send_otp_email(user, purpose, code, to_email=to_email)
         return True
     except EmailSendError:
         logger.exception("Could not send %s code to user %s", purpose, user.pk)
@@ -64,6 +64,8 @@ class RegisterView(PublicAuthView):
         data.is_valid(raise_exception=True)
         email, password = data.validated_data["email"], data.validated_data["password"]
         display_name = data.validated_data.get("display_name", "")
+        names = {k: data.validated_data.get(k, "") for k in ("first_name", "last_name")}
+        display_name = display_name or " ".join(v for v in names.values() if v)
 
         user = find_user(email)
         if user and user.email_verified:
@@ -72,9 +74,11 @@ class RegisterView(PublicAuthView):
             # Unverified sign-up being retried: whoever proves the inbox owns the account.
             user.set_password(password)
             user.display_name = display_name or user.display_name
-            user.save(update_fields=["password", "display_name"])
+            user.first_name = names["first_name"] or user.first_name
+            user.last_name = names["last_name"] or user.last_name
+            user.save(update_fields=["password", "display_name", "first_name", "last_name"])
         else:
-            user = User.objects.create_user(email=email, password=password, display_name=display_name)
+            user = User.objects.create_user(email=email, password=password, display_name=display_name, **names)
 
         sent = send_code(user, EmailOTP.Purpose.VERIFY_EMAIL)
         return Response(
@@ -158,6 +162,8 @@ class GoogleLoginView(PublicAuthView):
                     user.google_sub = sub
                     user.email_verified = True
                     user.display_name = user.display_name or info.get("name", "")
+                    user.first_name = user.first_name or info.get("given_name", "")[:60]
+                    user.last_name = user.last_name or info.get("family_name", "")[:60]
                     user.avatar_url = user.avatar_url or info.get("picture", "")
                     user.save()
                 else:
@@ -167,6 +173,8 @@ class GoogleLoginView(PublicAuthView):
                         auth_provider=User.Provider.GOOGLE,
                         email_verified=True,
                         display_name=info.get("name", ""),
+                        first_name=info.get("given_name", "")[:60],
+                        last_name=info.get("family_name", "")[:60],
                         avatar_url=info.get("picture", ""),
                     )
                     created = True

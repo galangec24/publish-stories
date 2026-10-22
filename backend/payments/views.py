@@ -2,14 +2,18 @@ import json
 import logging
 
 from django.db import transaction
+from django.db.models import Count, Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, permissions, serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+
 from accounts.permissions import IsAdmin
-from catalog.models import Story
+from catalog.models import Story, StoryView
+from notifications.realtime import push_admins
+from notifications.service import first_name, notify, notify_admins
 
 from .models import PaymentLog, Subscription
 from .paymongo import PayMongoError, create_checkout_session, verify_signature
@@ -63,6 +67,13 @@ class SubscribeView(APIView):
         subscription.checkout_session_id = session_id
         subscription.checkout_url = checkout_url
         subscription.save(update_fields=["checkout_session_id", "checkout_url"])
+        notify_admins(
+            "checkout_started",
+            f"{first_name(request.user)} started checkout: {story.title}",
+            f"{request.user.email} · ₱{story.price}",
+            "/admin/readers",
+        )
+        push_admins("payments.changed", {"subscription": subscription.pk})
         return Response(
             {"checkout_url": checkout_url, "subscription": SubscriptionSerializer(subscription).data},
             status=status.HTTP_201_CREATED,
@@ -123,6 +134,21 @@ class PayMongoWebhookView(APIView):
                     subscription.paid_at = timezone.now()
                     subscription.save(update_fields=["status", "paid_at"])
                     outcome = "paid"
+                    story = subscription.story
+                    notify(
+                        [subscription.user_id],
+                        "payment_paid",
+                        f"Unlocked: {story.title}",
+                        "Payment received. Enjoy the full story!",
+                        f"/stories/{story.slug}",
+                    )
+                    notify_admins(
+                        "payment_paid",
+                        f"Payment received: {story.title}",
+                        f"{subscription.user.email} paid ₱{subscription.amount}",
+                        "/admin/readers",
+                    )
+                    push_admins("payments.changed", {"subscription": subscription.pk})
                 else:
                     outcome = "duplicate"
             elif event_type == PAID_EVENT:
@@ -157,3 +183,83 @@ class AdminSubscriptionView(generics.ListAPIView):
         if self.request.query_params.get("status"):
             queryset = queryset.filter(status=self.request.query_params["status"])
         return queryset
+
+
+def _person(user_id, email, first, display):
+    name = first or (display.split()[0] if display else email.split("@")[0])
+    return {"id": user_id, "first_name": name, "email": email}
+
+
+class AdminPendingCheckoutsView(APIView):
+    """Readers who opened QR Ph checkout but haven't paid (yet)."""
+
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        pending = Subscription.objects.filter(status=Subscription.Status.PENDING).select_related("user", "story")
+        return Response(
+            {
+                "count": pending.count(),
+                "results": [
+                    {
+                        "id": s.id,
+                        "user": _person(s.user_id, s.user.email, s.user.first_name, s.user.display_name),
+                        "story": {"id": s.story_id, "title": s.story.title, "slug": s.story.slug},
+                        "amount": str(s.amount),
+                        "created_at": s.created_at.isoformat(),
+                    }
+                    for s in pending[:300]
+                ],
+            }
+        )
+
+
+class AdminUnpaidReadersView(APIView):
+    """Signed-in readers who opened a paid story but have no paid unlock for it.
+
+    ?story=<id> narrows to one story. Guests can't be named, so they are only counted.
+    """
+
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        paid_stories = Story.objects.filter(price__gt=0).exclude(column__is_public=True)
+        views = StoryView.objects.filter(story__in=paid_stories)
+        story_id = request.query_params.get("story")
+        if story_id and story_id.isdigit():
+            views = views.filter(story_id=int(story_id))
+
+        paid = set(
+            Subscription.objects.filter(status=Subscription.Status.PAID).values_list("user_id", "story_id")
+        )
+        pending = set(
+            Subscription.objects.filter(status=Subscription.Status.PENDING).values_list("user_id", "story_id")
+        )
+        rows = (
+            views.filter(user__isnull=False, user__is_admin=False)
+            .values(
+                "user_id", "user__email", "user__first_name", "user__display_name",
+                "story_id", "story__title", "story__slug", "story__price",
+            )
+            .annotate(days_read=Count("id"), last_read=Max("created_at"))
+            .order_by("-last_read")
+        )
+        results = []
+        for r in rows:
+            key = (r["user_id"], r["story_id"])
+            if key in paid:
+                continue
+            results.append(
+                {
+                    "user": _person(r["user_id"], r["user__email"], r["user__first_name"], r["user__display_name"]),
+                    "story": {"id": r["story_id"], "title": r["story__title"], "slug": r["story__slug"]},
+                    "price": str(r["story__price"]),
+                    "days_read": r["days_read"],
+                    "last_read": r["last_read"].isoformat(),
+                    "checkout_started": key in pending,
+                }
+            )
+            if len(results) >= 500:
+                break
+        guests = views.filter(user__isnull=True).values("viewer_key").distinct().count()
+        return Response({"count": len(results), "guest_readers": guests, "results": results})

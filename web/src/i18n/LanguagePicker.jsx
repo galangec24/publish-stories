@@ -1,3 +1,4 @@
+import { Globe } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { useToast } from '../components/ui'
@@ -71,9 +72,7 @@ export function LanguagePicker() {
         aria-expanded={open}
         title="Language"
       >
-        <span className={busy ? 'animate-spin' : ''} aria-hidden>
-          🌐
-        </span>
+        <Globe className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} aria-hidden />
         <span className="hidden text-xs sm:inline">{current.native}</span>
       </button>
       {open && (

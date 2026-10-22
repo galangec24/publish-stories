@@ -1,35 +1,65 @@
+import { FileUp, FolderKanban, Library, MailQuestion, MessagesSquare, ReceiptText, Tags, UsersRound } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 
+import { api } from '../../lib/api'
+import { onLiveEvent } from '../../realtime/LiveProvider'
 import { BulkImport } from './BulkImport'
+import { EmailRequests } from './EmailRequests'
 import { Columns, Genres, Payments } from './Managers'
+import { ReadersMonitor } from './ReadersMonitor'
 import { StoryList } from './StoryList'
 import { StoryStudio } from './StoryStudio'
+import { SupportInbox } from './SupportInbox'
 
-const SECTIONS = [
-  { to: '/admin', label: 'Stories', icon: '📚', end: true },
-  { to: '/admin/import', label: 'Bulk import', icon: '⬆️' },
-  { to: '/admin/genres', label: 'Genres', icon: '🏷️' },
-  { to: '/admin/columns', label: 'Columns', icon: '🗂️' },
-  { to: '/admin/payments', label: 'Payments', icon: '🧾' },
-]
+/** Live counts for the sidebar badges (unread chats, pending email requests). */
+function useBadges() {
+  const [badges, setBadges] = useState({ support: 0, email: 0 })
+  useEffect(() => {
+    const load = () =>
+      Promise.all([api.get('admin/support/'), api.get('admin/email-requests/', { status: 'pending' })])
+        .then(([s, e]) => setBadges({ support: s.unread_total, email: e.pending_count }))
+        .catch(() => {})
+    load()
+    const offs = ['support.message', 'support.read', 'email_request'].map((ev) => onLiveEvent(ev, load))
+    return () => offs.forEach((off) => off())
+  }, [])
+  return badges
+}
 
 function AdminShell({ children }) {
+  const badges = useBadges()
+  const sections = [
+    { to: '/admin', label: 'Stories', icon: Library, end: true },
+    { to: '/admin/import', label: 'Bulk import', icon: FileUp },
+    { to: '/admin/readers', label: 'Readers & payments', icon: UsersRound },
+    { to: '/admin/support', label: 'Support inbox', icon: MessagesSquare, badge: badges.support },
+    { to: '/admin/email-requests', label: 'Email requests', icon: MailQuestion, badge: badges.email },
+    { to: '/admin/genres', label: 'Genres', icon: Tags },
+    { to: '/admin/columns', label: 'Columns', icon: FolderKanban },
+    { to: '/admin/payments', label: 'Payment logs', icon: ReceiptText },
+  ]
   return (
-    <div className="grid gap-6 pt-8 md:grid-cols-[200px_1fr]">
+    <div className="grid gap-6 pt-8 md:grid-cols-[220px_1fr]">
       <nav className="flex gap-1 overflow-x-auto md:flex-col">
-        {SECTIONS.map((s) => (
+        {sections.map(({ to, label, icon: Icon, end, badge }) => (
           <NavLink
-            key={s.to}
-            to={s.to}
-            end={s.end}
+            key={to}
+            to={to}
+            end={end}
             className={({ isActive }) =>
               `flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition ${
                 isActive ? 'bg-brand/15 font-semibold text-ink' : 'text-muted hover:bg-surface-2 hover:text-ink'
               }`
             }
           >
-            <span aria-hidden>{s.icon}</span>
-            {s.label}
+            <Icon className="h-4 w-4" />
+            <span className="flex-1">{label}</span>
+            {badge > 0 && (
+              <span className="grid h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1.5 text-[11px] font-bold text-white">
+                {badge}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>
@@ -43,6 +73,9 @@ export default function AdminRoutes() {
     <Routes>
       <Route path="stories/:id" element={<StoryStudio />} />
       <Route path="import" element={<AdminShell><BulkImport /></AdminShell>} />
+      <Route path="readers" element={<AdminShell><ReadersMonitor /></AdminShell>} />
+      <Route path="support" element={<AdminShell><SupportInbox /></AdminShell>} />
+      <Route path="email-requests" element={<AdminShell><EmailRequests /></AdminShell>} />
       <Route path="genres" element={<AdminShell><Genres /></AdminShell>} />
       <Route path="columns" element={<AdminShell><Columns /></AdminShell>} />
       <Route path="payments" element={<AdminShell><Payments /></AdminShell>} />

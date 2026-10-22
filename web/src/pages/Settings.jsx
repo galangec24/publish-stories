@@ -1,3 +1,4 @@
+import { BookOpen, ChevronRight, ScrollText } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { useToast } from '../components/ui'
@@ -74,7 +75,7 @@ export function Settings() {
                 mode === m.id ? 'border-brand ring-2 ring-brand/30' : 'border-line hover:border-muted'
               }`}
             >
-              <span className="text-2xl">{m.id === 'book' ? '📖' : '📜'}</span>
+              {m.id === 'book' ? <BookOpen className="h-6 w-6 text-brand" /> : <ScrollText className="h-6 w-6 text-brand" />}
               <p className="mt-2 font-medium">{m.label}</p>
               <p className="text-xs text-muted">{m.hint}</p>
             </button>
@@ -99,7 +100,7 @@ export function Settings() {
                 {user.preferred_genres?.length ? user.preferred_genres.map((g) => g.name).join(', ') : 'None picked yet'}
               </p>
             </div>
-            <span className="text-muted">→</span>
+            <ChevronRight className="h-5 w-5 text-muted" />
           </Link>
           <button
             className="w-full p-5 text-left font-semibold text-red-400 hover:bg-surface-2"

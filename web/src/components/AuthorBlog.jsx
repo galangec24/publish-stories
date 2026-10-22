@@ -1,3 +1,4 @@
+import { BookOpen, Eye, Library, Newspaper, School, UsersRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 /** Counts up from 0 the first time the number scrolls into view. */
@@ -46,17 +47,17 @@ function CountUp({ value, duration = 1600 }) {
 
 const WRITING = [
   {
-    icon: '📰',
+    icon: Newspaper,
     title: 'Newspaper columns',
     text: 'Opinion columns in SunStar Davao on education, leadership, personal reflections, and social issues.',
   },
   {
-    icon: '📖',
+    icon: BookOpen,
     title: 'Her own book',
     text: 'Long-form storytelling in her own voice, for readers who want to go deeper.',
   },
   {
-    icon: '🏫',
+    icon: School,
     title: 'Education features',
     text: 'Stories about education leaders and regional initiatives for DepEd Davao Dispatch.',
   },
@@ -83,9 +84,9 @@ export function AuthorBlog({ stats }) {
       {/* Live reader counter */}
       <div className="mx-auto mt-10 grid max-w-4xl gap-4 sm:grid-cols-3">
         {[
-          { label: 'Readers so far', value: stats?.total_readers, icon: '👥', big: true },
-          { label: 'Story views', value: stats?.total_views, icon: '👁' },
-          { label: 'Stories published', value: stats?.published_stories, icon: '📚' },
+          { label: 'Readers so far', value: stats?.total_readers, icon: UsersRound, big: true },
+          { label: 'Story views', value: stats?.total_views, icon: Eye },
+          { label: 'Stories published', value: stats?.published_stories, icon: Library },
         ].map((s) => (
           <div
             key={s.label}
@@ -94,9 +95,7 @@ export function AuthorBlog({ stats }) {
             }`}
           >
             {s.big && <div className="pointer-events-none absolute -top-10 left-1/2 h-24 w-40 -translate-x-1/2 rounded-full bg-accent/25 blur-2xl" />}
-            <p className="relative text-2xl" aria-hidden>
-              {s.icon}
-            </p>
+            <s.icon className={`relative mx-auto h-7 w-7 ${s.big ? 'text-accent' : 'text-brand'}`} aria-hidden />
             <p className={`relative mt-2 font-display ${s.big ? 'text-5xl text-accent' : 'text-4xl'}`}>
               <CountUp value={s.value || 0} />
             </p>
@@ -108,9 +107,9 @@ export function AuthorBlog({ stats }) {
       <div className="mx-auto mt-6 grid max-w-4xl gap-4 sm:grid-cols-3">
         {WRITING.map((w) => (
           <article key={w.title} className="rounded-2xl border border-line bg-surface/60 p-5">
-            <p className="text-2xl" aria-hidden>
-              {w.icon}
-            </p>
+            <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand/15 text-brand">
+              <w.icon className="h-5 w-5" aria-hidden />
+            </span>
             <h3 className="mt-2 font-semibold">{w.title}</h3>
             <p className="mt-1 text-sm text-muted">{w.text}</p>
           </article>

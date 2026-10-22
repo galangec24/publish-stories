@@ -46,6 +46,13 @@ export function AuthProvider({ children }) {
       ready,
       isAdmin: Boolean(user?.is_admin),
       refreshMe,
+      /** Store a fresh token pair (e.g. after confirming an email change). */
+      acceptTokens: accept,
+      async updateProfile(changes) {
+        const me = await api.patch('user/me/', changes)
+        setUser(me)
+        return me
+      },
       async login(email, password) {
         try {
           return accept(await api.post('auth/login/', { email, password }))
@@ -54,7 +61,8 @@ export function AuthProvider({ children }) {
           throw e
         }
       },
-      register: (email, password, display_name) => api.post('auth/register/', { email, password, display_name }),
+      register: (email, password, display_name, extra = {}) =>
+        api.post('auth/register/', { email, password, display_name, ...extra }),
       verifyEmail: async (email, code) => accept(await api.post('auth/verify-email/', { email, code })),
       resendCode: (email, purpose = 'verify_email') => api.post('auth/resend-code/', { email, purpose }),
       requestReset: (email) => api.post('auth/password/reset/', { email }),

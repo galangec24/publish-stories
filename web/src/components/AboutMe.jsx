@@ -1,23 +1,24 @@
+import { ArrowUpRight, BookMarked, GraduationCap, Newspaper, School } from 'lucide-react'
 import { useRef } from 'react'
 
 const ROLES = [
   {
-    icon: '🏫',
+    icon: School,
     title: 'DepEd Davao Region',
     text: 'Served as regional information and communications officer and headed the Public Affairs Unit (PAU), supporting public information, media relations, and education communications.',
   },
   {
-    icon: '📰',
+    icon: Newspaper,
     title: 'Journalism & writing',
     text: 'Writes for SunStar Davao, including opinion columns on education, leadership, personal reflections, and social issues.',
   },
   {
-    icon: '🎓',
+    icon: GraduationCap,
     title: 'Teaching',
     text: 'Taught Mass Communication at Ateneo de Davao University, with an emphasis on learning through real-world exposure and storytelling.',
   },
   {
-    icon: '📘',
+    icon: BookMarked,
     title: 'Publications',
     text: "Contributed to DepEd Davao Dispatch, DepEd Davao Region's official publication, including articles about education leaders and regional initiatives.",
   },
@@ -76,10 +77,8 @@ export function AboutMe() {
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               {ROLES.map((r) => (
                 <div key={r.title} className="rounded-2xl border border-line bg-surface-2/50 p-4 transition hover:-translate-y-0.5 hover:border-brand/50">
-                  <p className="font-semibold">
-                    <span className="mr-2" aria-hidden>
-                      {r.icon}
-                    </span>
+                  <p className="flex items-center gap-2 font-semibold">
+                    <r.icon className="h-5 w-5 text-brand" aria-hidden />
                     {r.title}
                   </p>
                   <p className="mt-1.5 text-sm text-muted">{r.text}</p>
@@ -95,10 +94,10 @@ export function AboutMe() {
 
             <div className="mt-6 flex flex-wrap gap-3">
               <a className="btn-ghost" href="https://www.sunstar.com.ph" target="_blank" rel="noreferrer noopener">
-                Read her columns on SunStar Davao ↗
+                Read her columns on SunStar Davao <ArrowUpRight className="h-4 w-4" />
               </a>
               <a className="btn-ghost" href="https://www.deped.gov.ph" target="_blank" rel="noreferrer noopener">
-                Education stories on DepEd ↗
+                Education stories on DepEd <ArrowUpRight className="h-4 w-4" />
               </a>
             </div>
           </div>

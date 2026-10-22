@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdmin
+from notifications.service import notify
 
 from .importers import ManuscriptError, import_manuscript
 from .models import Chapter, Column, Genre, Story
@@ -25,6 +26,17 @@ from .serializers import (
     ImportOptionsSerializer,
 )
 from .views import filter_stories
+
+
+def announce_story(story):
+    """Tell every reader about a story the first time it is published."""
+    from django.contrib.auth import get_user_model
+
+    readers = get_user_model().objects.filter(is_active=True, is_admin=False).values_list("pk", flat=True)
+    genre = story.genres.first()
+    blurb = story.synopsis[:120] if story.synopsis else "Start reading now."
+    body = f"{genre.name} · {blurb}" if genre else blurb
+    notify(list(readers), "new_story", f"New story: {story.title}", body, f"/stories/{story.slug}")
 
 
 class AdminGenreViewSet(viewsets.ModelViewSet):
@@ -65,8 +77,11 @@ class AdminStoryViewSet(viewsets.ModelViewSet):
         story = self.get_object()
         if not story.chapters.filter(word_count__gt=0).exists():
             return Response({"detail": "Write something before publishing."}, status=400)
+        first_time = story.published_at is None
         story.status = Story.Status.PUBLISHED
         story.save()
+        if first_time:
+            announce_story(story)
         return Response(self.get_serializer(story).data)
 
     @action(detail=True, methods=["post"])
@@ -273,6 +288,7 @@ class AdminStoryImportView(APIView):
                 if story.word_count:
                     story.status = Story.Status.PUBLISHED
                     story.save()
+                    announce_story(story)
                 else:
                     result["warnings"].append("Empty manuscript left as a draft.")
 

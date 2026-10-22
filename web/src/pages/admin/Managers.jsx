@@ -1,3 +1,4 @@
+import { GripVertical, Lock, LockOpen } from 'lucide-react'
 import { useRef, useState } from 'react'
 
 import { Field, Spinner, useToast } from '../../components/ui'
@@ -75,7 +76,7 @@ export function Genres() {
               onClick={() => setEdit({ id: g.id, name: g.name, description: g.description, color: g.color, is_active: g.is_active })}
               className="flex cursor-pointer items-center gap-3 p-4 hover:bg-surface-2"
             >
-              <span className="cursor-grab text-muted">⋮⋮</span>
+              <GripVertical className="h-4 w-4 cursor-grab text-muted" />
               <span className="h-4 w-4 rounded-full" style={{ background: g.color }} />
               <div className="flex-1">
                 <p className="font-medium">{g.name}</p>
@@ -141,7 +142,7 @@ export function Columns() {
               onClick={() => setEdit({ id: c.id, title: c.title, description: c.description, is_public: c.is_public })}
               className="flex w-full items-center gap-3 p-4 text-left hover:bg-surface-2"
             >
-              <span className="text-xl">{c.is_public ? '🔓' : '🔒'}</span>
+              {c.is_public ? <LockOpen className="h-5 w-5 text-emerald-400" /> : <Lock className="h-5 w-5 text-amber-500" />}
               <div className="flex-1">
                 <p className="font-medium">{c.title}</p>
                 <p className="text-sm text-muted">{c.is_public ? 'Public · free for everyone' : 'Paywalled'}</p>

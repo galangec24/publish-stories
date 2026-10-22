@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react'
 import { createContext, useCallback, useContext, useState } from 'react'
 
 export function Spinner({ className = '' }) {
@@ -26,7 +27,7 @@ export function GenreChips({ genres, selected, onToggle, by = 'id' }) {
           >
             <span className="h-2 w-2 rounded-full" style={{ background: g.color }} />
             {g.name}
-            {on && <span aria-hidden>✓</span>}
+            {on && <Check className="h-3.5 w-3.5" aria-hidden />}
           </button>
         )
       })}

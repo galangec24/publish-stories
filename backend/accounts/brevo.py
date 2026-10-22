@@ -50,34 +50,51 @@ def send_email(*, to_email, to_name="", subject="", html="", text="", template_i
 
 
 _SUBJECTS = {
-    "verify_email": "Your verification code",
-    "reset_password": "Your password reset code",
+    "verify_email": "Your Publish Stories verification code",
+    "reset_password": "Your Publish Stories password reset code",
+    "change_email": "Confirm your new email for Publish Stories",
 }
 _INTROS = {
     "verify_email": "Use this code to verify your email address:",
     "reset_password": "Use this code to reset your password:",
+    "change_email": "Use this code to confirm this is your new email address:",
 }
 
+_HTML = """\
+<!doctype html><html><body style="margin:0;background:#f4f1fb;font-family:Inter,Segoe UI,Arial,sans-serif;color:#1b1630">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 12px">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+       style="max-width:480px;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(27,22,48,.08)">
+<tr><td style="background:#0e0b1a;padding:22px 28px;color:#f3eefe;font-size:20px;font-weight:700;font-family:Georgia,serif">
+Publish <span style="color:#f5b942">Stories</span></td></tr>
+<tr><td style="padding:28px">
+<p style="margin:0 0 12px;font-size:16px">Hi {name},</p>
+<p style="margin:0 0 20px;font-size:15px;color:#4a4560">{intro}</p>
+<p style="margin:0 0 20px;text-align:center">
+<span style="display:inline-block;padding:14px 22px;border-radius:12px;background:#f4f1fb;border:1px solid #e0daf0;
+font-size:32px;font-weight:700;letter-spacing:10px;color:#1b1630">{code}</span></p>
+<p style="margin:0;font-size:13px;color:#6b6488">{footer}</p>
+</td></tr></table></td></tr></table></body></html>"""
 
-def send_otp_email(user, purpose, code):
+
+def send_otp_email(user, purpose, code, to_email=None):
+    """Email a one-time code. `to_email` overrides the recipient (new address for email changes)."""
     template_id = {
         "verify_email": settings.BREVO_VERIFY_TEMPLATE_ID,
         "reset_password": settings.BREVO_RESET_TEMPLATE_ID,
+        "change_email": "",
     }[purpose]
     minutes = settings.OTP_TTL_MINUTES
-    name = user.display_name or user.email
+    name = user.first_name or user.display_name or user.email
     intro = _INTROS[purpose]
     footer = f"It expires in {minutes} minutes. If you didn't request this, you can ignore this email."
     send_email(
-        to_email=user.email,
+        to_email=to_email or user.email,
         to_name=user.display_name,
         subject=_SUBJECTS[purpose],
         template_id=template_id or None,
         params={"code": code, "name": name, "minutes": minutes},
         text=f"Hi {name},\n\n{intro} {code}\n\n{footer}",
-        html=(
-            f"<p>Hi {escape(name)},</p><p>{intro}</p>"
-            f'<p style="font-size:28px;font-weight:bold;letter-spacing:6px">{code}</p>'
-            f"<p>{footer}</p>"
-        ),
+        html=_HTML.format(name=escape(name), intro=intro, code=code, footer=footer),
     )

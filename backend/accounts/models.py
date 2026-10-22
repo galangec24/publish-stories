@@ -40,6 +40,8 @@ class User(AbstractBaseUser, PermissionsMixin):
         GOOGLE = "google", "Google"
 
     email = models.EmailField(unique=True)
+    first_name = models.CharField(max_length=60, blank=True)
+    last_name = models.CharField(max_length=60, blank=True)
     display_name = models.CharField(max_length=120, blank=True)
     avatar_url = models.URLField(blank=True)
     auth_provider = models.CharField(max_length=16, choices=Provider.choices, default=Provider.EMAIL)
@@ -94,6 +96,7 @@ class EmailOTP(models.Model):
     class Purpose(models.TextChoices):
         VERIFY_EMAIL = "verify_email", "Verify email"
         RESET_PASSWORD = "reset_password", "Reset password"
+        CHANGE_EMAIL = "change_email", "Confirm new email"
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="otps")
     purpose = models.CharField(max_length=20, choices=Purpose.choices)
@@ -144,3 +147,42 @@ class EmailOTP(models.Model):
         self.attempts += 1
         self.save(update_fields=["attempts"])
         return False
+
+
+class EmailChangeRequest(models.Model):
+    """Readers can't edit their email directly: they ask, an admin approves,
+    then the reader proves the new inbox with a code and picks whether to keep
+    or change their password."""
+
+    APPROVAL_DAYS = 7
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Waiting for admin"
+        APPROVED = "approved", "Approved, waiting for the reader"
+        DENIED = "denied", "Denied"
+        COMPLETED = "completed", "Completed"
+        CANCELLED = "cancelled", "Cancelled"
+
+    OPEN = (Status.PENDING, Status.APPROVED)
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="email_requests")
+    old_email = models.EmailField()
+    new_email = models.EmailField()
+    reason = models.CharField(max_length=500, blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING, db_index=True)
+    admin_note = models.CharField(max_length=500, blank=True)
+    decided_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    decided_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    @property
+    def approval_expired(self):
+        return bool(
+            self.status == self.Status.APPROVED
+            and self.decided_at
+            and timezone.now() - self.decided_at > timedelta(days=self.APPROVAL_DAYS)
+        )

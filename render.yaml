@@ -4,6 +4,14 @@
 # FREE PLAN: the API sleeps when idle. Before going live switch to plan: starter
 # and move migrate into preDeployCommand.
 services:
+  # Redis-compatible store that relays live events (notifications, support chat)
+  # between server workers. Internal-only: no outside connections allowed.
+  - type: keyvalue
+    name: story-realtime
+    plan: free
+    region: singapore
+    ipAllowList: []
+
   - type: web
     name: story-api
     runtime: python
@@ -12,7 +20,7 @@ services:
     rootDir: backend
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
     # Free plans don't run preDeployCommand, so migrations run at start-up.
-    startCommand: python manage.py migrate --noinput && python manage.py seed_genres && python manage.py ensure_admin && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    startCommand: python manage.py migrate --noinput && python manage.py seed_genres && python manage.py ensure_admin && gunicorn config.asgi:application -k uvicorn_worker.UvicornWorker --bind 0.0.0.0:$PORT --workers 2 --timeout 60
     healthCheckPath: /api/genres/
     envVars:
       # First admin account (free plans have no shell for createsuperuser).
@@ -26,6 +34,11 @@ services:
       # postgresql://postgres.<ref>:<password>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require
       - key: DATABASE_URL
         sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: story-realtime
+          property: connectionString
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: DJANGO_DEBUG

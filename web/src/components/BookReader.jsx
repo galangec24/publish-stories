@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 const GAP = 64
@@ -141,7 +142,7 @@ export function BookReader({ children, onPrevChapter, onNextChapter, hasPrev, ha
 
       <div className="mt-5 flex items-center gap-3">
         <button className="btn-ghost !px-3" onClick={() => go(-1)} disabled={shown === 0 && !hasPrev} aria-label="Previous page">
-          ←
+          <ChevronLeft className="h-4 w-4" />
         </button>
         <input
           type="range"
@@ -156,7 +157,7 @@ export function BookReader({ children, onPrevChapter, onNextChapter, hasPrev, ha
           {spread ? 'Spread' : 'Page'} {shown + 1} / {pages}
         </span>
         <button className="btn-ghost !px-3" onClick={() => go(1)} disabled={shown >= pages - 1 && !hasNext} aria-label="Next page">
-          →
+          <ChevronRight className="h-4 w-4" />
         </button>
       </div>
     </div>

@@ -64,3 +64,38 @@ class PaymentTests(APITestCase):
     def test_free_story_cannot_be_bought(self):
         free = Story.objects.create(title="Free", price=0, status="published")
         self.assertEqual(self.client.post(f"/api/subscribe/{free.id}/").status_code, 400)
+
+
+class AdminMonitoringTests(APITestCase):
+    def setUp(self):
+        from catalog.models import StoryView
+
+        self.admin = User.objects.create_user(email="admin@example.com", password="x", is_admin=True)
+        self.story = Story.objects.create(title="Paid", price=49, status="published")
+        self.free = Story.objects.create(title="Free", price=0, status="published")
+        self.reader = User.objects.create_user(email="reader@example.com", password="x", first_name="Lia")
+        self.payer = User.objects.create_user(email="payer@example.com", password="x")
+        for user, story in [(self.reader, self.story), (self.payer, self.story), (self.reader, self.free)]:
+            StoryView.objects.create(story=story, viewer_key=f"k{user.pk}", user=user, date="2026-10-20")
+        StoryView.objects.create(story=self.story, viewer_key="guest", date="2026-10-20")
+        Subscription.objects.create(user=self.payer, story=self.story, amount=49, status="paid")
+        Subscription.objects.create(user=self.reader, story=self.story, amount=49, status="pending")
+        self.client.force_authenticate(self.admin)
+
+    def test_unpaid_readers_lists_only_signed_in_non_payers_of_paid_stories(self):
+        data = self.client.get("/api/admin/payments/unpaid-readers/").data
+        self.assertEqual(data["count"], 1)
+        row = data["results"][0]
+        self.assertEqual((row["user"]["first_name"], row["user"]["email"]), ("Lia", "reader@example.com"))
+        self.assertEqual(row["story"]["title"], "Paid")
+        self.assertTrue(row["checkout_started"])
+        self.assertEqual(data["guest_readers"], 1)
+
+    def test_pending_checkouts(self):
+        data = self.client.get("/api/admin/payments/pending/").data
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["user"]["email"], "reader@example.com")
+
+    def test_admin_only(self):
+        self.client.force_authenticate(self.reader)
+        self.assertEqual(self.client.get("/api/admin/payments/unpaid-readers/").status_code, 403)

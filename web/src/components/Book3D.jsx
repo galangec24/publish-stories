@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { Eye, UsersRound } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { formatCount } from '../lib/readingMode'
@@ -56,8 +57,9 @@ export function Book3D({ story, size = 'md' }) {
           {story.is_free ? 'Free' : `₱${Number(story.price).toFixed(2)}`}
           {story.chapter_count ? ` · ${story.chapter_count} ch` : ''}
         </p>
-        <p className="text-xs text-muted" title={`${story.view_count} views · ${story.reader_count} readers`}>
-          👁 {formatCount(story.view_count)} · 👥 {formatCount(story.reader_count)}
+        <p className="flex items-center gap-2.5 text-xs text-muted" title={`${story.view_count} views · ${story.reader_count} readers`}>
+          <span className="inline-flex items-center gap-1"><Eye className="h-3.5 w-3.5" /> {formatCount(story.view_count)}</span>
+          <span className="inline-flex items-center gap-1"><UsersRound className="h-3.5 w-3.5" /> {formatCount(story.reader_count)}</span>
         </p>
       </div>
     </Link>

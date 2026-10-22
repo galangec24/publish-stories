@@ -1,3 +1,4 @@
+import { AlertTriangle, CheckCircle2, FileText, FileType2, Tags, UploadCloud, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -135,7 +136,7 @@ export function BulkImport() {
         }`}
       >
         <div>
-          <p className="text-3xl">📄📄📄</p>
+          <UploadCloud className="mx-auto h-10 w-10 text-brand" />
           <p className="mt-2 font-semibold">Drop manuscripts here or click to choose</p>
           <p className="text-sm text-muted">.docx, .md, .txt · up to 50 files · 10 MB each</p>
         </div>
@@ -146,7 +147,7 @@ export function BulkImport() {
         <section className="card divide-y divide-line">
           {files.map((f, i) => (
             <div key={f.file.name} className="flex flex-wrap items-center gap-3 p-4">
-              <span className="text-xl">{f.file.name.endsWith('.docx') ? '📘' : '📝'}</span>
+              {f.file.name.endsWith('.docx') ? <FileType2 className="h-6 w-6 text-sky-400" /> : <FileText className="h-6 w-6 text-muted" />}
               <div className="min-w-0 flex-1">
                 <input
                   className="input !py-1.5"
@@ -158,7 +159,7 @@ export function BulkImport() {
                   {f.file.name} · Genres: {f.genreIds ? [...f.genreIds].map((id) => genreName[id]).join(', ') || 'none' : 'batch'}
                 </p>
               </div>
-              <button className="btn-ghost !py-1.5" onClick={() => setEditing(i)}>🏷 Genres</button>
+              <button className="btn-ghost !py-1.5" onClick={() => setEditing(i)}><Tags className="h-4 w-4" /> Genres</button>
               <button className="px-2 text-xl text-muted hover:text-red-400" title="Remove" onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))}>×</button>
             </div>
           ))}
@@ -179,7 +180,7 @@ export function BulkImport() {
           <ul className="mt-3 divide-y divide-line">
             {result.results.map((r) => (
               <li key={r.filename} className="flex items-start gap-3 py-3">
-                <span>{r.ok ? '✅' : '⚠️'}</span>
+                {r.ok ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" /> : <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" />}
                 <div className="min-w-0 flex-1 text-sm">
                   <p className="font-medium">{r.ok ? `${r.title}` : r.filename}</p>
                   {r.ok ? (
@@ -191,7 +192,7 @@ export function BulkImport() {
                     <p className="text-red-400">{typeof r.error === 'string' ? r.error : JSON.stringify(r.error)}</p>
                   )}
                   {r.warnings?.map((w) => (
-                    <p key={w} className="text-amber-500">⚠ {w}</p>
+                    <p key={w} className="flex items-center gap-1 text-amber-500"><AlertTriangle className="h-3.5 w-3.5" /> {w}</p>
                   ))}
                 </div>
                 {r.ok && (

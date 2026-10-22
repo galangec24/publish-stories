@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework.routers import SimpleRouter
 
 from . import admin_views as views
+from .images import ImageUploadView
 
 router = SimpleRouter()
 router.register("genres", views.AdminGenreViewSet, basename="admin-genre")
@@ -11,6 +12,7 @@ router.register("stories", views.AdminStoryViewSet, basename="admin-story")
 urlpatterns = [
     # Declared before the router so "import" isn't captured as a story pk.
     path("stories/import/", views.AdminStoryImportView.as_view()),
+    path("images/", ImageUploadView.as_view()),
     path("stories/<int:story_id>/chapters/", views.AdminChapterListView.as_view()),
     path("stories/<int:story_id>/chapters/reorder/", views.AdminChapterReorderView.as_view()),
     path("chapters/<int:pk>/", views.AdminChapterDetailView.as_view()),

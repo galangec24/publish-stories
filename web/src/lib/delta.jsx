@@ -6,7 +6,13 @@ function splitLines(ops) {
   let runs = []
   for (const op of ops || []) {
     const { insert, attributes } = op
-    if (typeof insert !== 'string') continue // embeds are not used by the Studio
+    if (typeof insert !== 'string') {
+      // Images uploaded in the Studio: {insert: {image: url}} on a line of their own.
+      if (insert && typeof insert.image === 'string' && /^(https?:\/\/|\/api\/media\/)/.test(insert.image)) {
+        runs.push({ image: insert.image, attrs: attributes || {} })
+      }
+      continue
+    }
     const parts = insert.split('\n')
     parts.forEach((part, i) => {
       if (part) runs.push({ text: part, attrs: attributes || {} })
@@ -20,7 +26,10 @@ function splitLines(ops) {
   return lines
 }
 
-function Run({ text, attrs }) {
+function Run({ text, image, attrs }) {
+  if (image) {
+    return <img src={image} alt={attrs.alt || ''} loading="lazy" decoding="async" className="story-image" />
+  }
   let node = text
   if (attrs.bold) node = <strong>{node}</strong>
   if (attrs.italic) node = <em>{node}</em>
@@ -40,6 +49,13 @@ function Line({ line }) {
   const { header, blockquote, align } = line.block
   const style = align ? { textAlign: align } : undefined
   const content = line.runs.length ? line.runs.map((r, i) => <Run key={i} {...r} />) : <br />
+  if (line.runs.length && line.runs.every((r) => r.image)) {
+    return (
+      <figure className="story-figure" style={{ textAlign: align || 'center' }}>
+        {content}
+      </figure>
+    )
+  }
   if (header === 1) return <h1 style={style}>{content}</h1>
   if (header === 2) return <h2 style={style}>{content}</h2>
   if (header === 3) return <h3 style={style}>{content}</h3>

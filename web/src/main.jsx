@@ -9,15 +9,18 @@ import App from './App'
 import { ToastProvider } from './components/ui'
 import { AuthProvider } from './lib/auth'
 import { InstallProvider } from './pwa/InstallPrompt'
+import { LiveProvider } from './realtime/LiveProvider'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <ToastProvider>
         <AuthProvider>
-          <InstallProvider>
-            <App />
-          </InstallProvider>
+          <LiveProvider>
+            <InstallProvider>
+              <App />
+            </InstallProvider>
+          </LiveProvider>
         </AuthProvider>
       </ToastProvider>
     </BrowserRouter>

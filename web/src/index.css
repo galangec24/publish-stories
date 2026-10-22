@@ -187,3 +187,16 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 /* Book mode: keep headings and short blocks from splitting across pages */
 .book-flow h1, .book-flow h2, .book-flow h3, .book-flow blockquote { break-inside: avoid; break-after: avoid; }
 .book-flow p { orphans: 2; widows: 2; }
+
+/* Images placed in stories (Studio → Insert → Image) */
+.story-figure { margin: 1.4em 0; break-inside: avoid; }
+.story-image {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 14px;
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.45);
+}
+/* In book mode a picture must fit on one page */
+.book-flow .story-image { max-height: calc(max(420px, 100dvh - 300px) - 4rem); object-fit: contain; }
+.studio-page .ql-editor img { max-width: 100%; border-radius: 12px; display: inline-block; }

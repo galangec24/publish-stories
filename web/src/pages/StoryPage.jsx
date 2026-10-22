@@ -1,3 +1,4 @@
+import { BookOpen, ChevronLeft, ChevronRight, Eye, Lock, QrCode, ScrollText, UsersRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
@@ -120,8 +121,8 @@ export function StoryPage() {
             <GenreTags genres={s.genres} />
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2 text-center">
-            <Stat value={formatCount(views)} label={views === 1 ? 'view' : 'views'} icon="👁" />
-            <Stat value={formatCount(readers)} label={readers === 1 ? 'reader' : 'readers'} icon="👥" />
+            <Stat value={formatCount(views)} label={views === 1 ? 'view' : 'views'} icon={Eye} />
+            <Stat value={formatCount(readers)} label={readers === 1 ? 'reader' : 'readers'} icon={UsersRound} />
           </div>
           {s.synopsis && <p className="mt-4 text-sm text-muted">{s.synopsis}</p>}
           <p className="mt-3 text-xs text-muted">
@@ -141,8 +142,10 @@ export function StoryPage() {
                     mode === m.id ? 'bg-brand text-white shadow' : 'text-muted hover:text-ink'
                   }`}
                 >
-                  {m.id === 'book' ? '📖 ' : '📜 '}
-                  {m.label}
+                  <span className="inline-flex items-center justify-center gap-1.5">
+                    {m.id === 'book' ? <BookOpen className="h-4 w-4" /> : <ScrollText className="h-4 w-4" />}
+                    {m.label}
+                  </span>
                 </button>
               ))}
             </div>
@@ -161,7 +164,7 @@ export function StoryPage() {
                 }`}
               >
                 <span className="truncate">{c.title}</span>
-                {c.content === null && <span aria-label="locked">🔒</span>}
+                {c.content === null && <Lock className="h-3.5 w-3.5 shrink-0" aria-label="locked" />}
               </button>
             ))}
           </nav>
@@ -192,13 +195,13 @@ export function StoryPage() {
         {mode === 'scroll' && (
           <div className="mt-6 flex items-center justify-between">
             <button className="btn-ghost" disabled={index === 0} onClick={() => go(index - 1)}>
-              ← Previous
+              <ChevronLeft className="h-4 w-4" /> Previous
             </button>
             <Link to="/" className="text-sm text-muted hover:text-ink">
               All stories
             </Link>
             <button className="btn-ghost" disabled={index >= s.chapters.length - 1} onClick={() => go(index + 1)}>
-              Next →
+              Next <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         )}
@@ -207,13 +210,11 @@ export function StoryPage() {
   )
 }
 
-function Stat({ value, label, icon }) {
+function Stat({ value, label, icon: Icon }) {
   return (
     <div className="rounded-xl border border-line bg-surface-2/60 px-2 py-2">
-      <p className="font-display text-xl leading-none">
-        <span className="mr-1 text-sm" aria-hidden>
-          {icon}
-        </span>
+      <p className="flex items-center justify-center gap-1.5 font-display text-xl leading-none">
+        <Icon className="h-4 w-4 text-brand" aria-hidden />
         {value}
       </p>
       <p className="mt-1 text-[11px] tracking-wide text-muted uppercase">{label}</p>
@@ -225,7 +226,7 @@ function Paywall({ story, paying, onUnlock, onRefresh, signedIn }) {
   return (
     <div className="relative mt-6 break-inside-avoid">
       <div className="rounded-2xl border border-line bg-surface p-6 text-center">
-        <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-accent/15 text-2xl">🔒</div>
+        <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-accent/15 text-accent"><Lock className="h-6 w-6" /></div>
         <h3 className="font-display text-xl">Keep reading for ₱{Number(story.price).toFixed(2)}</h3>
         <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
           One-time unlock. Pay with GCash, Maya or your bank app by scanning a QR Ph code.

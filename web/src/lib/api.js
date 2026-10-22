@@ -61,6 +61,7 @@ export function clearTokens() {
 }
 
 export const hasSession = () => Boolean(store.refresh)
+export const accessToken = () => store.access
 export const refreshToken = () => store.refresh
 
 let onExpired = () => {}

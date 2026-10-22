@@ -19,6 +19,8 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "email",
+            "first_name",
+            "last_name",
             "display_name",
             "avatar_url",
             "auth_provider",
@@ -30,7 +32,10 @@ class UserSerializer(serializers.ModelSerializer):
             "preferred_genres",
             "date_joined",
         ]
-        read_only_fields = [f for f in fields if f not in ("display_name", "avatar_url", "reading_mode")]
+        # Email is deliberately read-only: changing it goes through EmailChangeRequest.
+        read_only_fields = [
+            f for f in fields if f not in ("first_name", "last_name", "display_name", "avatar_url", "reading_mode")
+        ]
 
     def get_theme(self, user):
         theme = getattr(user, "theme", None)
@@ -41,6 +46,8 @@ class RegisterSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
     display_name = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    first_name = serializers.CharField(max_length=60, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=60, required=False, allow_blank=True)
 
     def validate_email(self, value):
         return value.strip().lower()

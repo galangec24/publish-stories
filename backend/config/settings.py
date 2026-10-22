@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "channels",
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
@@ -48,6 +49,8 @@ INSTALLED_APPS = [
     "catalog",
     "payments",
     "translations",
+    "notifications",
+    "support",
 ]
 
 MIDDLEWARE = [
@@ -64,6 +67,19 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
+
+# Real-time events (notifications, support chat). Redis (Render Key Value) lets
+# every server worker reach every socket; without it a single-process
+# in-memory layer is used (fine for local development and tests).
+REDIS_URL = os.environ.get("REDIS_URL", "")
+CHANNEL_LAYERS = {
+    "default": (
+        {"BACKEND": "channels_redis.core.RedisChannelLayer", "CONFIG": {"hosts": [REDIS_URL]}}
+        if REDIS_URL
+        else {"BACKEND": "channels.layers.InMemoryChannelLayer"}
+    )
+}
 
 TEMPLATES = [
     {
@@ -150,6 +166,7 @@ REST_FRAMEWORK = {
         "otp": "10/hour",
         "views": "300/hour",
         "translate": "600/hour",
+        "chat": "60/min",
     },
 }
 

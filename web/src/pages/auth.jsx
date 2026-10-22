@@ -1,3 +1,4 @@
+import { ArrowLeft, KeyRound, LogIn, MailCheck, UserPlus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
@@ -6,10 +7,20 @@ import { EmailNotVerified, useAuth } from '../lib/auth'
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
-function AuthCard({ title, subtitle, children }) {
+function AuthCard({ title, subtitle, children, back, icon: Icon }) {
   return (
     <div className="mx-auto max-w-md animate-float-up pt-12">
+      {back && (
+        <Link to={back.to} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
+          <ArrowLeft className="h-4 w-4" /> {back.label}
+        </Link>
+      )}
       <div className="card p-7 sm:p-8">
+        {Icon && (
+          <span className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-brand/15 text-brand">
+            <Icon className="h-6 w-6" />
+          </span>
+        )}
         <h1 className="font-display text-3xl">{title}</h1>
         {subtitle && <p className="mt-1.5 text-sm text-muted">{subtitle}</p>}
         <div className="mt-6">{children}</div>
@@ -104,7 +115,7 @@ export function Login() {
   }
 
   return (
-    <AuthCard title="Welcome back" subtitle="Sign in to unlock stories and sync your library.">
+    <AuthCard icon={LogIn} title="Welcome back" subtitle="Sign in to unlock stories and sync your library.">
       <GoogleButton onError={(e) => toast(e, 'error')} />
       <Divider />
       <form onSubmit={submit} className="space-y-4">
@@ -137,7 +148,7 @@ export function Register() {
   const { register } = useAuth()
   const toast = useToast()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ display_name: '', email: '', password: '' })
+  const [form, setForm] = useState({ first_name: '', last_name: '', email: '', password: '' })
   const [busy, setBusy] = useState(false)
 
   async function submit(e) {
@@ -145,7 +156,9 @@ export function Register() {
     setBusy(true)
     try {
       const email = form.email.trim()
-      await register(email, form.password, form.display_name.trim())
+      const first_name = form.first_name.trim()
+      const last_name = form.last_name.trim()
+      await register(email, form.password, `${first_name} ${last_name}`.trim(), { first_name, last_name })
       navigate('/verify', { state: { email } })
     } catch (err) {
       toast(err, 'error')
@@ -155,13 +168,23 @@ export function Register() {
   }
 
   return (
-    <AuthCard title="Create your account" subtitle="We'll email you a 6-digit code to confirm it's you.">
+    <AuthCard
+      icon={UserPlus}
+      back={{ to: '/login', label: 'Back to sign in' }}
+      title="Create your account"
+      subtitle="We'll email you a 6-digit code to confirm it's you."
+    >
       <GoogleButton onError={(e) => toast(e, 'error')} />
       <Divider />
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Display name">
-          <input className="input" autoComplete="nickname" value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} />
-        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="First name">
+            <input className="input" autoComplete="given-name" required maxLength={60} value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} />
+          </Field>
+          <Field label="Last name">
+            <input className="input" autoComplete="family-name" maxLength={60} value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} />
+          </Field>
+        </div>
         <Field label="Email">
           <input className="input" type="email" autoComplete="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
         </Field>
@@ -210,7 +233,7 @@ export function VerifyEmail() {
     return () => clearTimeout(t)
   }, [cooldown])
 
-  if (!email) return <AuthCard title="Verify your email"><Link className="text-brand" to="/login">Back to sign in</Link></AuthCard>
+  if (!email) return <AuthCard back={{ to: '/login', label: 'Back to sign in' }} title="Verify your email" subtitle="Sign in again to get a new code." />
 
   async function verify(value = code) {
     if (value.length !== 6) return
@@ -227,7 +250,7 @@ export function VerifyEmail() {
   }
 
   return (
-    <AuthCard title="Check your inbox" subtitle={`Enter the 6-digit code we sent to ${email}.`}>
+    <AuthCard icon={MailCheck} back={{ to: '/login', label: 'Back to sign in' }} title="Check your inbox" subtitle={`Enter the 6-digit code we sent to ${email}.`}>
       <CodeInput value={code} onChange={setCode} onComplete={verify} />
       <button className="btn-primary mt-4 w-full" disabled={busy || code.length !== 6} onClick={() => verify()}>
         {busy ? 'Verifying…' : 'Verify'}
@@ -271,7 +294,7 @@ export function ResetPassword() {
   }
 
   return (
-    <AuthCard title="Reset password" subtitle={sent ? `Enter the code sent to ${email} and choose a new password.` : "We'll email you a 6-digit code."}>
+    <AuthCard icon={KeyRound} back={{ to: '/login', label: 'Back to sign in' }} title="Reset password" subtitle={sent ? `Enter the code sent to ${email} and choose a new password.` : "We'll email you a 6-digit code."}>
       {!sent ? (
         <form
           className="space-y-4"

@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -143,3 +145,21 @@ class Chapter(models.Model):
 
     def __str__(self):
         return f"{self.story} / {self.title or self.order}"
+
+
+class StoryImage(models.Model):
+    """An image placed inside a chapter.
+
+    Stored in the database (as compressed WebP) rather than on disk, because
+    Render's disk is wiped on every deploy. The id is a random UUID so image
+    URLs can't be guessed.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    data = models.BinaryField()
+    content_type = models.CharField(max_length=40, default="image/webp")
+    width = models.PositiveIntegerField()
+    height = models.PositiveIntegerField()
+    size = models.PositiveIntegerField()
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)

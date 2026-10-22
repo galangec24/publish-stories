@@ -8,6 +8,7 @@ import { setTheme } from './lib/theme'
 import { Home } from './pages/Home'
 import { Login, Register, ResetPassword, VerifyEmail } from './pages/auth'
 import { Onboarding } from './pages/Onboarding'
+import { Profile } from './pages/Profile'
 import { Settings } from './pages/Settings'
 import { StoryPage } from './pages/StoryPage'
 
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="reset-password" element={<ResetPassword />} />
         <Route path="welcome" element={user ? <Onboarding /> : <Navigate to="/login" replace />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="profile" element={<Profile />} />
         <Route
           path="admin/*"
           element={

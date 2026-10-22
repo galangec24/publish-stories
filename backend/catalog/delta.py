@@ -31,8 +31,19 @@ def validate_ops(ops):
             raise ValueError("Only 'insert' and 'attributes' are allowed in stored documents.")
         if not isinstance(op["insert"], (str, dict)):
             raise ValueError("'insert' must be a string or an embed object.")
+        if isinstance(op["insert"], dict):
+            _validate_embed(op["insert"])
         if "attributes" in op and not isinstance(op["attributes"], dict):
             raise ValueError("'attributes' must be an object.")
+
+
+def _validate_embed(embed):
+    """Only image embeds with a plain http(s) URL (no data: or javascript: URLs)."""
+    if set(embed) != {"image"} or not isinstance(embed["image"], str):
+        raise ValueError("Only image embeds are supported.")
+    url = embed["image"]
+    if len(url) > 1000 or not url.startswith(("https://", "http://", "/api/media/")):
+        raise ValueError("Images must be uploaded (pasted image data isn't allowed).")
 
 
 def normalize(ops):

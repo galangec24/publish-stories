@@ -1,5 +1,39 @@
 import 'quill/dist/quill.core.css'
 
+import {
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  ArrowLeft,
+  Bold,
+  BookOpenText,
+  FilePlus2,
+  GripVertical,
+  Hash,
+  ImagePlus,
+  Italic,
+  List,
+  ListOrdered,
+  PanelLeft,
+  Pencil,
+  Plus,
+  Quote,
+  Redo2,
+  RemoveFormatting,
+  Save,
+  Scissors,
+  Search,
+  Settings2,
+  Sparkles,
+  Strikethrough,
+  Trash2,
+  Underline,
+  Undo2,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react'
 import Quill from 'quill'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
@@ -50,9 +84,24 @@ export function StoryStudio() {
     // Own host element per mount so StrictMode's double effect doesn't stack two editors.
     const host = document.createElement('div')
     editorEl.current.appendChild(host)
+    const Delta = Quill.import('delta')
     const q = new Quill(host, {
       placeholder: 'Start writing your story…',
-      modules: { toolbar: false, history: { delay: 1000, maxStack: 500, userOnly: true } },
+      modules: {
+        toolbar: false,
+        history: { delay: 1000, maxStack: 500, userOnly: true },
+        // Dropped or pasted image files are uploaded, then placed as their own paragraph.
+        uploader: {
+          mimetypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+          handler(range, files) {
+            files.reduce((chain, file) => chain.then(() => uploadAndInsert(file, range.index)), Promise.resolve())
+          },
+        },
+        clipboard: {
+          // Pasted HTML can carry huge inline "data:" images; those are dropped (use Insert → Image).
+          matchers: [['IMG', (node, delta) => (node.getAttribute('src')?.startsWith('data:') ? new Delta() : delta)]],
+        },
+      },
     })
     quill.current = q
     const refreshUi = () => {
@@ -304,6 +353,29 @@ export function StoryStudio() {
     const sel = q().getSelection(true)
     if (sel) q().removeFormat(sel.index, Math.max(sel.length, 1), 'user')
   }
+  /** Upload an image, then insert it on its own line at `index` (or the cursor). */
+  async function uploadAndInsert(file, index) {
+    const quillInstance = quill.current
+    const at = index ?? quillInstance.getSelection(true)?.index ?? quillInstance.getLength() - 1
+    const form = new FormData()
+    form.append('image', file)
+    toast(`Uploading ${file.name}…`)
+    try {
+      const { url } = await api.upload('admin/images/', form)
+      // Image on its own centred line, with an empty line after it for a caption or text.
+      const before = at > 0 && quillInstance.getText(at - 1, 1) !== '\n' ? '\n' : ''
+      if (before) quillInstance.insertText(at, before, 'user')
+      const pos = at + before.length
+      quillInstance.insertEmbed(pos, 'image', url, 'user')
+      quillInstance.insertText(pos + 1, '\n', 'user')
+      quillInstance.formatLine(pos, 1, 'align', 'center', 'user')
+      quillInstance.setSelection(pos + 2, 0, 'user')
+    } catch (e) {
+      toast(e, 'error')
+    }
+  }
+  const imageInput = useRef(null)
+
   const sceneBreak = () => {
     const sel = q().getSelection(true)
     const index = sel ? sel.index : q().getLength() - 1
@@ -352,7 +424,7 @@ export function StoryStudio() {
       {/* Title bar */}
       <header className="flex items-center gap-3 border-b border-line bg-surface px-3 py-2">
         <Link to="/admin" className="btn-ghost !px-2.5 !py-1.5" onClick={(e) => dirtyRef.current && !window.confirm('Leave with unsaved changes?') && e.preventDefault()}>
-          ←
+          <ArrowLeft className="h-4 w-4" />
         </Link>
         <div className="min-w-0 flex-1">
           <p className="truncate font-display text-lg leading-tight">{story?.title || '…'}</p>
@@ -361,7 +433,7 @@ export function StoryStudio() {
           </p>
         </div>
         <button className="btn-ghost !py-1.5" onClick={() => setSettingsOpen(true)}>
-          ⚙ <span className="hidden sm:inline">Story settings</span>
+          <Settings2 className="h-4 w-4" /> <span className="hidden sm:inline">Story settings</span>
         </button>
         {published ? (
           <button className="btn-ghost !py-1.5" onClick={() => publish(false)}>
@@ -391,24 +463,24 @@ export function StoryStudio() {
           {tab === 'home' && (
             <>
               <Group label="History">
-                <Tool title="Undo (Ctrl+Z)" onClick={() => q().history.undo()}>↶</Tool>
-                <Tool title="Redo (Ctrl+Y)" onClick={() => q().history.redo()}>↷</Tool>
+                <Tool title="Undo (Ctrl+Z)" onClick={() => q().history.undo()}><Undo2 className="h-4 w-4" /></Tool>
+                <Tool title="Redo (Ctrl+Y)" onClick={() => q().history.redo()}><Redo2 className="h-4 w-4" /></Tool>
               </Group>
               <Group label="Font">
-                <Tool title="Bold (Ctrl+B)" active={format.bold} onClick={() => toggle('bold')}><b>B</b></Tool>
-                <Tool title="Italic (Ctrl+I)" active={format.italic} onClick={() => toggle('italic')}><i className="font-serif">I</i></Tool>
-                <Tool title="Underline (Ctrl+U)" active={format.underline} onClick={() => toggle('underline')}><u>U</u></Tool>
-                <Tool title="Strikethrough" active={format.strike} onClick={() => toggle('strike')}><s>S</s></Tool>
-                <Tool title="Clear formatting" onClick={clearFormatting}>⌫</Tool>
+                <Tool title="Bold (Ctrl+B)" active={format.bold} onClick={() => toggle('bold')}><Bold className="h-4 w-4" /></Tool>
+                <Tool title="Italic (Ctrl+I)" active={format.italic} onClick={() => toggle('italic')}><Italic className="h-4 w-4" /></Tool>
+                <Tool title="Underline (Ctrl+U)" active={format.underline} onClick={() => toggle('underline')}><Underline className="h-4 w-4" /></Tool>
+                <Tool title="Strikethrough" active={format.strike} onClick={() => toggle('strike')}><Strikethrough className="h-4 w-4" /></Tool>
+                <Tool title="Clear formatting" onClick={clearFormatting}><RemoveFormatting className="h-4 w-4" /></Tool>
               </Group>
               <Group label="Paragraph">
-                <Tool title="Bullets" active={format.list === 'bullet'} onClick={() => toggle('list', 'bullet')}>•≡</Tool>
-                <Tool title="Numbering" active={format.list === 'ordered'} onClick={() => toggle('list', 'ordered')}>1.≡</Tool>
-                <Tool title="Quote" active={format.blockquote} onClick={() => toggle('blockquote')}>❝</Tool>
-                <Tool title="Align left" active={!format.align} onClick={() => q().format('align', false, 'user')}>⇤</Tool>
-                <Tool title="Center" active={format.align === 'center'} onClick={() => toggle('align', 'center')}>↔</Tool>
-                <Tool title="Align right" active={format.align === 'right'} onClick={() => toggle('align', 'right')}>⇥</Tool>
-                <Tool title="Justify" active={format.align === 'justify'} onClick={() => toggle('align', 'justify')}>☰</Tool>
+                <Tool title="Bullets" active={format.list === 'bullet'} onClick={() => toggle('list', 'bullet')}><List className="h-4 w-4" /></Tool>
+                <Tool title="Numbering" active={format.list === 'ordered'} onClick={() => toggle('list', 'ordered')}><ListOrdered className="h-4 w-4" /></Tool>
+                <Tool title="Quote" active={format.blockquote} onClick={() => toggle('blockquote')}><Quote className="h-4 w-4" /></Tool>
+                <Tool title="Align left" active={!format.align} onClick={() => q().format('align', false, 'user')}><AlignLeft className="h-4 w-4" /></Tool>
+                <Tool title="Center" active={format.align === 'center'} onClick={() => toggle('align', 'center')}><AlignCenter className="h-4 w-4" /></Tool>
+                <Tool title="Align right" active={format.align === 'right'} onClick={() => toggle('align', 'right')}><AlignRight className="h-4 w-4" /></Tool>
+                <Tool title="Justify" active={format.align === 'justify'} onClick={() => toggle('align', 'justify')}><AlignJustify className="h-4 w-4" /></Tool>
               </Group>
               <Group label="Styles">
                 {[
@@ -429,34 +501,46 @@ export function StoryStudio() {
                 ))}
               </Group>
               <Group label="Save">
-                <Tool title="Save now (Ctrl+S)" onClick={save}>💾</Tool>
+                <Tool title="Save now (Ctrl+S)" onClick={save}><Save className="h-4 w-4" /></Tool>
               </Group>
             </>
           )}
           {tab === 'insert' && (
             <>
               <Group label="Chapters">
-                <Big icon="＋" label="New chapter" onClick={() => addChapter()} />
-                <Big icon="✂" label="Split here" onClick={splitHere} />
+                <Big icon={FilePlus2} label="New chapter" onClick={() => addChapter()} />
+                <Big icon={Scissors} label="Split here" onClick={splitHere} />
               </Group>
               <Group label="Text">
-                <Big icon="⁂" label="Scene break" onClick={sceneBreak} />
+                <Big icon={ImagePlus} label="Image" onClick={() => imageInput.current?.click()} />
+                <Big icon={Sparkles} label="Scene break" onClick={sceneBreak} />
+                <input
+                  ref={imageInput}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  hidden
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    e.target.value = ''
+                    if (file) uploadAndInsert(file)
+                  }}
+                />
               </Group>
             </>
           )}
           {tab === 'view' && (
             <>
               <Group label="Show">
-                <Big icon="▤" label="Navigation pane" active={navOpen} onClick={() => setNavOpen((o) => !o)} />
+                <Big icon={PanelLeft} label="Navigation pane" active={navOpen} onClick={() => setNavOpen((o) => !o)} />
               </Group>
               <Group label="Zoom">
-                <Tool title="Zoom out" onClick={() => setZoom((z) => Math.max(0.7, +(z - 0.1).toFixed(1)))}>－</Tool>
+                <Tool title="Zoom out" onClick={() => setZoom((z) => Math.max(0.7, +(z - 0.1).toFixed(1)))}><ZoomOut className="h-4 w-4" /></Tool>
                 <button className="px-2 text-sm" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
-                <Tool title="Zoom in" onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(1)))}>＋</Tool>
+                <Tool title="Zoom in" onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(1)))}><ZoomIn className="h-4 w-4" /></Tool>
               </Group>
               <Group label="Preview">
                 <Big
-                  icon="📖"
+                  icon={BookOpenText}
                   label="Open as reader"
                   onClick={async () => {
                     await flush()
@@ -468,8 +552,8 @@ export function StoryStudio() {
           )}
           {tab === 'review' && (
             <Group label="Proofing">
-              <Big icon="🔍" label="Find (Ctrl+F)" onClick={find} />
-              <Big icon="#" label="Word count" onClick={showWordCount} />
+              <Big icon={Search} label="Find (Ctrl+F)" onClick={find} />
+              <Big icon={Hash} label="Word count" onClick={showWordCount} />
             </Group>
           )}
         </div>
@@ -482,7 +566,7 @@ export function StoryStudio() {
             <div className="flex items-center justify-between px-3 py-2">
               <span className="text-sm font-semibold">Navigation</span>
               <button className="rounded-lg px-2 text-lg text-muted hover:text-ink" title="New chapter" onClick={() => addChapter()}>
-                ＋
+                <Plus className="h-5 w-5" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-2 pb-4">
@@ -500,11 +584,11 @@ export function StoryStudio() {
                     }`}
                     onClick={() => openChapter(c.id)}
                   >
-                    <span className="cursor-grab text-muted" title="Drag to reorder">⋮⋮</span>
+                    <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted" aria-label="Drag to reorder" />
                     <span className="min-w-0 flex-1 truncate">{c.title || 'Untitled'}</span>
                     <span className="text-[10px] text-muted">{c.word_count}</span>
-                    <button className="hidden px-1 text-muted group-hover:block hover:text-ink" title="Rename" onClick={(e) => { e.stopPropagation(); renameChapter(c) }}>✎</button>
-                    <button className="hidden px-1 text-muted group-hover:block hover:text-red-400" title="Delete" onClick={(e) => { e.stopPropagation(); deleteChapter(c) }}>×</button>
+                    <button className="hidden px-1 text-muted group-hover:block hover:text-ink" title="Rename" onClick={(e) => { e.stopPropagation(); renameChapter(c) }}><Pencil className="h-3.5 w-3.5" /></button>
+                    <button className="hidden px-1 text-muted group-hover:block hover:text-red-400" title="Delete" onClick={(e) => { e.stopPropagation(); deleteChapter(c) }}><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                   {c.id === chapterId &&
                     headings.map((h, j) => (
@@ -625,14 +709,14 @@ function Tool({ title, active, onClick, children }) {
   )
 }
 
-function Big({ icon, label, onClick, active }) {
+function Big({ icon: Icon, label, onClick, active }) {
   return (
     <button
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={`mx-0.5 flex flex-col items-center rounded-lg px-3 py-1 text-xs ${active ? 'bg-brand/15' : 'hover:bg-surface-2'}`}
     >
-      <span className="text-xl leading-6">{icon}</span>
+      <Icon className="mb-0.5 h-5 w-5" />
       {label}
     </button>
   )
@@ -689,7 +773,7 @@ function SettingsDrawer({ story, genres, columns, onClose, onSave, onUploadCover
       <aside className="h-full w-full max-w-md overflow-y-auto border-l border-line bg-surface p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="font-display text-2xl">Story settings</h2>
-          <button className="text-2xl text-muted hover:text-ink" onClick={onClose}>×</button>
+          <button className="rounded-full p-1 text-muted hover:bg-surface-2 hover:text-ink" onClick={onClose} aria-label="Close"><X className="h-5 w-5" /></button>
         </div>
         <div className="mt-6 space-y-4">
           <Field label="Title"><input className="input" value={form.title} onChange={set('title')} /></Field>

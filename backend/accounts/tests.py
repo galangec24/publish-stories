@@ -17,8 +17,8 @@ class CapturedCodes:
     def __init__(self):
         self.codes = {}
 
-    def __call__(self, user, purpose, code):
-        self.codes[(user.email, purpose)] = code
+    def __call__(self, user, purpose, code, to_email=None):
+        self.codes[(to_email or user.email, purpose)] = code
 
 
 @override_settings(OTP_RESEND_COOLDOWN_SECONDS=0)
