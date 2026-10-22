@@ -1,14 +1,15 @@
-import { BookOpen, ChevronLeft, ChevronRight, Eye, Lock, QrCode, ScrollText, UsersRound } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, Eye, Lock, MessageCircle, QrCode, ScrollText, UsersRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { BookReader } from '../components/BookReader'
 import { ProtectedContent } from '../components/ProtectedContent'
+import { LikeButton, StoryComments } from '../components/StoryCommunity'
 import { GenreTags, Spinner, useToast } from '../components/ui'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { DeltaView } from '../lib/delta'
-import { fontStack } from '../lib/fonts'
+import { fontStack, titleStack } from '../lib/fonts'
 import { formatCount, READING_MODES, useReadingMode } from '../lib/readingMode'
 import { useAsync } from '../lib/useAsync'
 
@@ -25,6 +26,8 @@ export function StoryPage() {
   const [tocOpen, setTocOpen] = useState(false)
   const [paying, setPaying] = useState(false)
   const [counts, setCounts] = useState(null)
+  const [social, setSocial] = useState({ liked: false }) // likes + comments, kept fresh by StoryComments
+  const updateSocial = (patch) => setSocial((x) => ({ ...x, ...patch }))
   const poll = useRef()
   const top = useRef()
 
@@ -103,7 +106,7 @@ export function StoryPage() {
       <p className="text-xs tracking-[0.25em] text-muted uppercase">
         Chapter {index + 1} of {s.chapters.length}
       </p>
-      <h2 className="mt-2 mb-8 font-display text-3xl text-page-ink">{chapter?.title}</h2>
+      <h2 className="mt-2 mb-8 text-3xl text-page-ink" style={{ fontFamily: titleStack(s.title_font) }}>{chapter?.title}</h2>
       {chapter?.content && <DeltaView ops={chapter.content} fontFamily={fontStack(s.font_family)} fontSize={s.font_size} />}
       {showPaywall && (
         <Paywall story={s} paying={paying} onUnlock={unlock} onRefresh={story.reload} signedIn={!!user} />
@@ -115,8 +118,15 @@ export function StoryPage() {
     <div ref={top} className="grid gap-8 pt-8 lg:grid-cols-[280px_1fr]">
       <aside className="lg:sticky lg:top-24 lg:self-start">
         <div className="card p-5">
-          <p className="text-xs tracking-widest text-muted uppercase">{s.column?.title || 'Story'}</p>
-          <h1 className="mt-1 font-display text-2xl leading-tight">{s.title}</h1>
+          <p className="flex items-center gap-1.5 text-xs tracking-widest text-muted uppercase">
+            {s.column?.title || 'Story'}
+            {s.column?.url && (
+              <a href={s.column.url} target="_blank" rel="noreferrer noopener" className="text-brand hover:text-accent" title="Visit this column">
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            )}
+          </p>
+          <h1 className="mt-1 text-2xl leading-tight" style={{ fontFamily: titleStack(s.title_font) }}>{s.title}</h1>
           {s.author_name && <p className="mt-1 text-sm text-muted">by {s.author_name}</p>}
           <div className="mt-3">
             <GenreTags genres={s.genres} />
@@ -124,6 +134,18 @@ export function StoryPage() {
           <div className="mt-4 grid grid-cols-2 gap-2 text-center">
             <Stat value={formatCount(views)} label={views === 1 ? 'view' : 'views'} icon={Eye} />
             <Stat value={formatCount(readers)} label={readers === 1 ? 'reader' : 'readers'} icon={UsersRound} />
+          </div>
+          <div className="mt-3 flex gap-2">
+            <LikeButton
+              slug={s.slug}
+              liked={social.liked}
+              count={social.like_count ?? s.like_count}
+              onChange={updateSocial}
+              className="flex-1 !px-2 !py-2"
+            />
+            <a href="#comments" className="btn-ghost !px-3 !py-2" title="Comments">
+              <MessageCircle className="h-4 w-4" /> {formatCount(social.comment_count ?? s.comment_count)}
+            </a>
           </div>
           {s.synopsis && <p className="mt-4 text-sm text-muted">{s.synopsis}</p>}
           <p className="mt-3 text-xs text-muted">
@@ -206,6 +228,7 @@ export function StoryPage() {
             </button>
           </div>
         )}
+        <StoryComments slug={s.slug} onCounts={updateSocial} />
       </article>
     </div>
   )

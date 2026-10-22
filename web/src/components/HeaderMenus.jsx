@@ -33,6 +33,8 @@ const KIND_ICON = {
   email_approved: [MailCheck, 'bg-emerald-500'],
   email_denied: [MailX, 'bg-rose-500'],
   email_changed: [AtSign, 'bg-emerald-500'],
+  comment: [MessageCircle, 'bg-pink-500'],
+  comment_reply: [MessageCircle, 'bg-pink-500'],
 }
 
 function useDropdown() {

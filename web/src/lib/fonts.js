@@ -30,3 +30,20 @@ export const IMAGE_WIDTHS = [
   { value: '75%', label: 'Large' },
   { value: '100%', label: 'Full width' },
 ]
+
+// Fonts for the story title and chapter titles (id stored as story.title_font).
+export const TITLE_FONTS = [
+  { id: 'fraunces', label: 'Fraunces', family: 'Fraunces' },
+  { id: 'playfair', label: 'Playfair Display', family: 'Playfair Display' },
+  { id: 'lora', label: 'Lora', family: 'Lora' },
+  { id: 'merriweather', label: 'Merriweather', family: 'Merriweather' },
+  { id: 'literata', label: 'Literata', family: 'Literata' },
+  { id: 'source_serif', label: 'Source Serif', family: 'Source Serif 4' },
+  { id: 'inter', label: 'Inter', family: 'Inter' },
+  { id: 'nunito', label: 'Nunito', family: 'Nunito' },
+]
+
+export function titleStack(id) {
+  const font = TITLE_FONTS.find((f) => f.id === id) || TITLE_FONTS[0]
+  return `'${font.family}', Georgia, serif`
+}

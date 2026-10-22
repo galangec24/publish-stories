@@ -1,4 +1,4 @@
-import { FileUp, FolderKanban, Library, MailQuestion, MessagesSquare, ReceiptText, Tags, UserRoundPen, UsersRound } from 'lucide-react'
+import { FileUp, FolderKanban, Library, MailQuestion, MessageSquareText, MessagesSquare, ReceiptText, Tags, UserRoundPen, UsersRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 
@@ -6,6 +6,7 @@ import { api } from '../../lib/api'
 import { onLiveEvent } from '../../realtime/LiveProvider'
 import { AboutEditor } from './AboutEditor'
 import { BulkImport } from './BulkImport'
+import { CommentsAdmin } from './CommentsAdmin'
 import { EmailRequests } from './EmailRequests'
 import { Columns, Genres, Payments } from './Managers'
 import { ReadersMonitor } from './ReadersMonitor'
@@ -35,6 +36,7 @@ function AdminShell({ children }) {
     { to: '/admin/import', label: 'Bulk import', icon: FileUp },
     { to: '/admin/readers', label: 'Readers & payments', icon: UsersRound },
     { to: '/admin/support', label: 'Support inbox', icon: MessagesSquare, badge: badges.support },
+    { to: '/admin/comments', label: 'Comments', icon: MessageSquareText },
     { to: '/admin/email-requests', label: 'Email requests', icon: MailQuestion, badge: badges.email },
     { to: '/admin/about', label: 'About me', icon: UserRoundPen },
     { to: '/admin/genres', label: 'Genres', icon: Tags },
@@ -77,6 +79,7 @@ export default function AdminRoutes() {
       <Route path="import" element={<AdminShell><BulkImport /></AdminShell>} />
       <Route path="readers" element={<AdminShell><ReadersMonitor /></AdminShell>} />
       <Route path="support" element={<AdminShell><SupportInbox /></AdminShell>} />
+      <Route path="comments" element={<AdminShell><CommentsAdmin /></AdminShell>} />
       <Route path="email-requests" element={<AdminShell><EmailRequests /></AdminShell>} />
       <Route path="about" element={<AdminShell><AboutEditor /></AdminShell>} />
       <Route path="genres" element={<AdminShell><Genres /></AdminShell>} />

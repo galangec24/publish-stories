@@ -185,6 +185,7 @@ REST_FRAMEWORK = {
         "views": "300/hour",
         "translate": "600/hour",
         "chat": "60/min",
+        "comment": "10/min",
     },
 }
 

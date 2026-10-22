@@ -1,4 +1,4 @@
-import { GripVertical, Lock, LockOpen } from 'lucide-react'
+import { ExternalLink, GripVertical, Lock, LockOpen, Trash2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 
 import { Field, Spinner, useToast } from '../../components/ui'
@@ -45,6 +45,22 @@ export function Genres() {
     }
   }
 
+  async function removeGenre(g) {
+    const used = g.story_count
+      ? `
+
+${g.story_count} stor${g.story_count === 1 ? 'y uses' : 'ies use'} it. The stories stay; only the "${g.name}" tag is removed from them and from readers' favourites.`
+      : ''
+    if (!window.confirm(`Delete the genre "${g.name}"?${used}`)) return
+    try {
+      await api.delete(`admin/genres/${g.id}/`)
+      toast(`Deleted "${g.name}".`)
+      list.reload()
+    } catch (e) {
+      toast(e, 'error')
+    }
+  }
+
   async function drop(to) {
     const from = dragFrom.i
     if (from === null || from === to) return
@@ -83,6 +99,18 @@ export function Genres() {
                 <p className="font-medium">{g.name}</p>
                 <p className="text-sm text-muted">{g.is_active ? g.description || '—' : 'Hidden from readers'}</p>
               </div>
+              <span className="text-xs text-muted">{g.story_count ?? 0} stor{g.story_count === 1 ? 'y' : 'ies'}</span>
+              <button
+                type="button"
+                title={`Delete ${g.name}`}
+                className="rounded-lg p-2 text-muted hover:bg-rose-500/10 hover:text-rose-400"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeGenre(g)
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
             </div>
           ))}
         </div>
@@ -128,13 +156,18 @@ export function Columns() {
           {list.data.map((c) => (
             <button
               key={c.id}
-              onClick={() => setEdit({ id: c.id, title: c.title, description: c.description, is_public: c.is_public })}
+              onClick={() => setEdit({ id: c.id, title: c.title, description: c.description, is_public: c.is_public, url: c.url || "" })}
               className="flex w-full items-center gap-3 p-4 text-left hover:bg-surface-2"
             >
               {c.is_public ? <LockOpen className="h-5 w-5 text-emerald-400" /> : <Lock className="h-5 w-5 text-amber-500" />}
               <div className="flex-1">
                 <p className="font-medium">{c.title}</p>
                 <p className="text-sm text-muted">{c.is_public ? 'Public · free for everyone' : 'Paywalled'}</p>
+                {c.url && (
+                  <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-brand">
+                    <ExternalLink className="h-3 w-3 shrink-0" /> {c.url}
+                  </p>
+                )}
               </div>
             </button>
           ))}

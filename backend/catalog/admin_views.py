@@ -41,10 +41,16 @@ def announce_story(story):
 
 
 class AdminGenreViewSet(viewsets.ModelViewSet):
+    """Deleting a genre removes the tag from its stories and from readers' favourites."""
+
     permission_classes = [IsAdmin]
     serializer_class = GenreSerializer
     pagination_class = None
-    queryset = Genre.objects.all()
+
+    def get_queryset(self):
+        from django.db.models import Count
+
+        return Genre.objects.annotate(story_count=Count("stories", distinct=True)).order_by("sort_order", "name")
 
 
 class AdminColumnViewSet(viewsets.ModelViewSet):

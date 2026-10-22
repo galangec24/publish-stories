@@ -1,7 +1,8 @@
 import { useRef } from 'react'
-import { Eye, UsersRound } from 'lucide-react'
+import { ExternalLink, Eye, Heart, UsersRound } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
+import { titleStack } from '../lib/fonts'
 import { formatCount } from '../lib/readingMode'
 
 /** A story shown as a physical book that tilts toward the cursor. */
@@ -42,7 +43,7 @@ export function Book3D({ story, size = 'md' }) {
                 {story.genres?.[0]?.name || 'Story'}
               </span>
               <div>
-                <p className="font-display text-lg leading-tight drop-shadow">{story.title}</p>
+                <p className="text-lg leading-tight drop-shadow" style={{ fontFamily: titleStack(story.title_font) }}>{story.title}</p>
                 {story.author_name && <p className="mt-1 text-xs opacity-80">{story.author_name}</p>}
               </div>
             </div>
@@ -60,13 +61,16 @@ export function Book3D({ story, size = 'md' }) {
         <p className="flex items-center gap-2.5 text-xs text-muted" title={`${story.view_count} views · ${story.reader_count} readers`}>
           <span className="inline-flex items-center gap-1"><Eye className="h-3.5 w-3.5" /> {formatCount(story.view_count)}</span>
           <span className="inline-flex items-center gap-1"><UsersRound className="h-3.5 w-3.5" /> {formatCount(story.reader_count)}</span>
+          {story.like_count > 0 && (
+            <span className="inline-flex items-center gap-1"><Heart className="h-3.5 w-3.5" /> {formatCount(story.like_count)}</span>
+          )}
         </p>
       </div>
     </Link>
   )
 }
 
-export function Shelf({ title, subtitle, stories }) {
+export function Shelf({ title, subtitle, stories, link }) {
   if (!stories?.length) return null
   return (
     <section className="mt-12">
@@ -75,6 +79,11 @@ export function Shelf({ title, subtitle, stories }) {
           <h2 className="font-display text-2xl">{title}</h2>
           {subtitle && <p className="text-sm text-muted">{subtitle}</p>}
         </div>
+        {link && (
+          <a href={link} target="_blank" rel="noreferrer noopener" className="btn-ghost !py-1.5 text-sm">
+            Visit <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        )}
       </div>
       {/* Wooden-shelf ledge under the books */}
       <div className="relative">

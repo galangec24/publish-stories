@@ -42,6 +42,7 @@ class Column(models.Model):
     slug = models.SlugField(max_length=200, unique=True, blank=True)
     description = models.TextField(blank=True)
     is_public = models.BooleanField(default=False, help_text="Stories in public columns are free for everyone")
+    url = models.URLField(max_length=500, blank=True, help_text="Optional link, e.g. the column's page on a newspaper site")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -87,12 +88,29 @@ class Story(models.Model):
         ],
     )
     font_size = models.PositiveSmallIntegerField(default=18, help_text="Base reading size in px (14-26)")
+    title_font = models.CharField(
+        max_length=20,
+        default="fraunces",
+        help_text="Font for the story title and chapter titles",
+        choices=[
+            ("fraunces", "Fraunces"),
+            ("playfair", "Playfair Display"),
+            ("lora", "Lora"),
+            ("merriweather", "Merriweather"),
+            ("literata", "Literata"),
+            ("source_serif", "Source Serif"),
+            ("inter", "Inter"),
+            ("nunito", "Nunito"),
+        ],
+    )
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT, db_index=True)
     published_at = models.DateTimeField(null=True, blank=True)
     word_count = models.PositiveIntegerField(default=0)
     # Denormalised counters, maintained by record_view().
     view_count = models.PositiveIntegerField(default=0, help_text="Reads, at most one per reader per day")
     reader_count = models.PositiveIntegerField(default=0, help_text="Distinct readers, all time")
+    like_count = models.PositiveIntegerField(default=0)
+    comment_count = models.PositiveIntegerField(default=0)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="stories"
     )
@@ -197,3 +215,27 @@ class AboutProfile(models.Model):
 
     def __str__(self):
         return f"About {self.name}"
+
+
+class StoryLike(models.Model):
+    story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="likes")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="story_likes")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["story", "user"], name="one_like_per_reader")]
+
+
+class Comment(models.Model):
+    """A reader's comment on a story. One level of replies (`parent`)."""
+
+    story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="comments")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="comments")
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.CASCADE, related_name="replies")
+    body = models.TextField(max_length=1000)
+    is_hidden = models.BooleanField(default=False, help_text="Hidden by an admin")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [models.Index(fields=["story", "parent", "-created_at"])]

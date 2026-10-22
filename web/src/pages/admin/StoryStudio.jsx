@@ -44,7 +44,7 @@ import { Link, useParams } from 'react-router-dom'
 import { Field, GenreChips, Spinner, useToast } from '../../components/ui'
 import { api, ApiError } from '../../lib/api'
 import { wordCount } from '../../lib/delta'
-import { FONTS, FONT_FAMILIES, fontStack, IMAGE_WIDTHS, TEXT_SIZES } from '../../lib/fonts'
+import { FONTS, FONT_FAMILIES, fontStack, IMAGE_WIDTHS, TEXT_SIZES, TITLE_FONTS, titleStack } from '../../lib/fonts'
 
 const AUTOSAVE_MS = 2000
 
@@ -852,10 +852,24 @@ function ImageToolbar({ sel, page, format, onWidth, onAlign, onAlt, onReplace, o
   )
 }
 
-/** Story-wide reading font and size, with a live sample. */
-export function TypographyPicker({ family, size, onChange }) {
+/** Story-wide title font, reading font and size, with a live sample. */
+export function TypographyPicker({ family, size, titleFont = 'fraunces', onChange }) {
   return (
     <div className="space-y-3">
+      <p className="text-sm font-medium">Title font</p>
+      <div className="flex flex-wrap gap-2">
+        {TITLE_FONTS.map((f) => (
+          <button
+            type="button"
+            key={f.id}
+            onClick={() => onChange({ title_font: f.id })}
+            className={`rounded-xl border px-3 py-1.5 text-base transition ${titleFont === f.id ? 'border-brand bg-brand/10 ring-2 ring-brand/25' : 'border-line hover:border-muted'}`}
+            style={{ fontFamily: titleStack(f.id) }}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
       <p className="text-sm font-medium">Reading font</p>
       <div className="grid gap-2 sm:grid-cols-2">
         {FONTS.map((f) => (
@@ -877,9 +891,12 @@ export function TypographyPicker({ family, size, onChange }) {
         </span>
         <input type="range" min="14" max="26" value={size} onChange={(e) => onChange({ font_size: Number(e.target.value) })} className="mt-2 w-full accent-[var(--brand)]" />
       </label>
-      <p className="rounded-xl border border-line bg-page p-3 text-page-ink" style={{ fontFamily: fontStack(family), fontSize: size, lineHeight: 1.75 }}>
-        Ang ulan ay bumuhos nang walang tigil, at sa bawat patak ay may kuwentong naghihintay.
-      </p>
+      <div className="rounded-xl border border-line bg-page p-3 text-page-ink">
+        <p className="text-2xl leading-tight" style={{ fontFamily: titleStack(titleFont) }}>Unang Kabanata</p>
+        <p className="mt-2" style={{ fontFamily: fontStack(family), fontSize: size, lineHeight: 1.75 }}>
+          Ang ulan ay bumuhos nang walang tigil, at sa bawat patak ay may kuwentong naghihintay.
+        </p>
+      </div>
     </div>
   )
 }
@@ -940,6 +957,7 @@ function SettingsDrawer({ story, genres, columns, onClose, onSave, onUploadCover
     column_id: story.column?.id ?? '',
     font_family: story.font_family || 'literata',
     font_size: story.font_size || 18,
+    title_font: story.title_font || 'fraunces',
   })
   const [genreIds, setGenreIds] = useState(new Set(story.genres.map((g) => g.id)))
   const [busy, setBusy] = useState(false)
@@ -996,6 +1014,7 @@ function SettingsDrawer({ story, genres, columns, onClose, onSave, onUploadCover
           <TypographyPicker
             family={form.font_family}
             size={Number(form.font_size)}
+            titleFont={form.title_font}
             onChange={(patch) => setForm({ ...form, ...patch })}
           />
           <button

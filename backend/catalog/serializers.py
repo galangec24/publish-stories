@@ -7,21 +7,24 @@ from .models import Chapter, Column, Genre, Story
 class GenreSerializer(serializers.ModelSerializer):
     class Meta:
         model = Genre
-        fields = ["id", "name", "slug", "description", "color", "sort_order", "is_active"]
-        read_only_fields = ["slug"]
+        fields = ["id", "name", "slug", "description", "color", "sort_order", "is_active", "story_count"]
+        read_only_fields = ["slug", "story_count"]
+
+    # Only filled in for admins (annotated query); shown before deleting a genre.
+    story_count = serializers.IntegerField(read_only=True, required=False)
 
 
 class ColumnSerializer(serializers.ModelSerializer):
     class Meta:
         model = Column
-        fields = ["id", "title", "slug", "description", "is_public", "created_at"]
+        fields = ["id", "title", "slug", "description", "is_public", "url", "created_at"]
         read_only_fields = ["slug", "created_at"]
 
 
 class ColumnMiniSerializer(serializers.ModelSerializer):
     class Meta:
         model = Column
-        fields = ["id", "title", "slug", "is_public"]
+        fields = ["id", "title", "slug", "is_public", "url"]
 
 
 class StoryListSerializer(serializers.ModelSerializer):
@@ -46,6 +49,9 @@ class StoryListSerializer(serializers.ModelSerializer):
             "preview_page_count",
             "font_family",
             "font_size",
+            "title_font",
+            "like_count",
+            "comment_count",
             "word_count",
             "view_count",
             "reader_count",
@@ -100,7 +106,7 @@ class AdminStorySerializer(StoryListSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["word_count", "view_count", "reader_count", "published_at", "created_at", "updated_at"]
+        read_only_fields = ["word_count", "view_count", "reader_count", "like_count", "comment_count", "published_at", "created_at", "updated_at"]
         extra_kwargs = {"slug": {"required": False}}
 
     def validate_font_size(self, value):

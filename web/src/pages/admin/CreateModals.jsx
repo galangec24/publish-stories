@@ -9,6 +9,7 @@ import {
   Globe2,
   ImagePlus,
   Layers,
+  Link2,
   Lock,
   PenLine,
   Plus,
@@ -22,6 +23,7 @@ import { useNavigate } from 'react-router-dom'
 import { IconInput, Modal } from '../../components/Modal'
 import { GenreChips, useToast } from '../../components/ui'
 import { api } from '../../lib/api'
+import { titleStack } from '../../lib/fonts'
 import { TypographyPicker } from './StoryStudio'
 
 const PRICE_PRESETS = [29, 49, 99, 149]
@@ -33,14 +35,14 @@ export function ColumnModal({ open, onClose, initial, onSaved }) {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (open) setForm({ title: '', description: '', is_public: false, ...initial })
+    if (open) setForm({ title: '', description: '', is_public: false, url: '', ...initial })
   }, [open, initial])
 
   async function save(e) {
     e.preventDefault()
     setBusy(true)
     try {
-      const body = { title: form.title.trim(), description: form.description.trim(), is_public: form.is_public }
+      const body = { title: form.title.trim(), description: form.description.trim(), is_public: form.is_public, url: (form.url || '').trim() }
       const saved = form.id ? await api.patch(`admin/columns/${form.id}/`, body) : await api.post('admin/columns/', body)
       toast(form.id ? 'Column updated.' : `Column “${saved.title}” created.`)
       onSaved?.(saved)
@@ -71,6 +73,16 @@ export function ColumnModal({ open, onClose, initial, onSaved }) {
       <form id="column-form" onSubmit={save} className="space-y-4">
         <IconInput icon={Type} label="Column name" required maxLength={200} placeholder="e.g. Sunday Reflections" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         <IconInput icon={AlignLeft} label="Description" multiline maxLength={600} placeholder="What readers will find here (optional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        <IconInput
+          icon={Link2}
+          label="Link (optional)"
+          type="url"
+          maxLength={500}
+          placeholder="https://www.sunstar.com.ph/author/…"
+          hint="E.g. where this column is published. Readers see a Visit link."
+          value={form.url || ''}
+          onChange={(e) => setForm({ ...form, url: e.target.value })}
+        />
         <div>
           <p className="mb-2 text-sm font-medium">Who can read it?</p>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -133,6 +145,7 @@ export function NewStoryModal({ open, onClose }) {
       preview_page_count: 3,
       font_family: 'literata',
       font_size: 18,
+      title_font: 'fraunces',
     }
   }
 
@@ -201,6 +214,7 @@ export function NewStoryModal({ open, onClose }) {
       preview_page_count: Number(form.preview_page_count) || 0,
       font_family: form.font_family,
       font_size: Number(form.font_size),
+      title_font: form.title_font,
     }
     try {
       let story
@@ -370,7 +384,7 @@ export function NewStoryModal({ open, onClose }) {
                     <div className="flex h-full flex-col justify-between p-4 text-white">
                       <span className="text-[10px] font-semibold tracking-[0.2em] uppercase opacity-80">{firstGenre?.name || 'Story'}</span>
                       <div>
-                        <p className="font-display text-xl leading-tight break-words">{form.title || 'Your title'}</p>
+                        <p className="text-xl leading-tight break-words" style={{ fontFamily: titleStack(form.title_font) }}>{form.title || 'Your title'}</p>
                         <p className="mt-1 text-xs opacity-80">{form.author_name || 'Author'}</p>
                       </div>
                     </div>
@@ -498,6 +512,7 @@ export function NewStoryModal({ open, onClose }) {
             <TypographyPicker
               family={form.font_family}
               size={Number(form.font_size)}
+              titleFont={form.title_font}
               onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
             />
           </div>

@@ -151,7 +151,7 @@ export function Home() {
             />
           )}
           {data.public_columns.map((c) => (
-            <Shelf key={c.id} title={c.title} subtitle="Free to read, always" stories={c.stories} />
+            <Shelf key={c.id} title={c.title} subtitle="Free to read, always" stories={c.stories} link={c.url} />
           ))}
           <Shelf title="Most read" subtitle="By views" stories={data.popular} />
           <Shelf title="New & updated" stories={data.latest} />
