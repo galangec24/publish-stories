@@ -17,6 +17,29 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_SIDE = 1600  # px; plenty for a reading column at 2x density
 
 
+class InvalidImage(ValueError):
+    pass
+
+
+def store_image(raw, user=None):
+    """Normalise an image (orientation, max 1600 px, WebP) and save it. Returns the StoryImage."""
+    try:
+        img = Image.open(io.BytesIO(raw) if isinstance(raw, (bytes, bytearray)) else raw)
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGBA" if img.mode in ("RGBA", "LA", "P") else "RGB")
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise InvalidImage("That file isn't a supported image (JPG, PNG, WebP, GIF).") from exc
+    img.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
+    out = io.BytesIO()
+    img.save(out, "WEBP", quality=84, method=6)
+    data = out.getvalue()
+    return StoryImage.objects.create(data=data, width=img.width, height=img.height, size=len(data), uploaded_by=user)
+
+
+def image_url(request, stored):
+    return request.build_absolute_uri(f"/api/media/images/{stored.id}.webp")
+
+
 class ImageUploadView(APIView):
     """POST /api/admin/images/ (multipart "image") → {url, width, height}."""
 
@@ -30,20 +53,13 @@ class ImageUploadView(APIView):
         if upload.size > MAX_UPLOAD_BYTES:
             return Response({"image": ["Images must be 10 MB or smaller."]}, status=400)
         try:
-            img = Image.open(upload)
-            img = ImageOps.exif_transpose(img)
-        except (UnidentifiedImageError, OSError):
-            return Response({"image": ["That file isn't a supported image (JPG, PNG, WebP, GIF)."]}, status=400)
-        img = img.convert("RGBA" if img.mode in ("RGBA", "LA", "P") else "RGB")
-        img.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
-        out = io.BytesIO()
-        img.save(out, "WEBP", quality=84, method=6)
-        data = out.getvalue()
-        stored = StoryImage.objects.create(
-            data=data, width=img.width, height=img.height, size=len(data), uploaded_by=request.user
+            stored = store_image(upload, request.user)
+        except InvalidImage as exc:
+            return Response({"image": [str(exc)]}, status=400)
+        return Response(
+            {"url": image_url(request, stored), "width": stored.width, "height": stored.height},
+            status=status.HTTP_201_CREATED,
         )
-        url = request.build_absolute_uri(f"/api/media/images/{stored.id}.webp")
-        return Response({"url": url, "width": stored.width, "height": stored.height}, status=status.HTTP_201_CREATED)
 
 
 @require_GET

@@ -33,6 +33,9 @@ import {
   X,
   ZoomIn,
   ZoomOut,
+  Captions,
+  CaseSensitive,
+  RefreshCw,
 } from 'lucide-react'
 import Quill from 'quill'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -41,8 +44,17 @@ import { Link, useParams } from 'react-router-dom'
 import { Field, GenreChips, Spinner, useToast } from '../../components/ui'
 import { api, ApiError } from '../../lib/api'
 import { wordCount } from '../../lib/delta'
+import { FONTS, FONT_FAMILIES, fontStack, IMAGE_WIDTHS, TEXT_SIZES } from '../../lib/fonts'
 
 const AUTOSAVE_MS = 2000
+
+// Fonts and sizes for selected text, stored inline (e.g. {font: "Lora", size: "20px"}).
+const FontStyle = Quill.import('attributors/style/font')
+FontStyle.whitelist = FONT_FAMILIES
+Quill.register(FontStyle, true)
+const SizeStyle = Quill.import('attributors/style/size')
+SizeStyle.whitelist = TEXT_SIZES
+Quill.register(SizeStyle, true)
 
 /**
  * Word-style editor for one story.
@@ -75,6 +87,9 @@ export function StoryStudio() {
   const [headings, setHeadings] = useState([])
   const [words, setWords] = useState(0)
   const [conflict, setConflict] = useState(null)
+  const [imageSel, setImageSel] = useState(null) // { index, el } of the clicked image
+  const pageRef = useRef(null)
+  const replaceInput = useRef(null)
   const [dialog, setDialog] = useState(null) // { title, label, value, resolve }
 
   const ask = (title, label, value = '') => new Promise((resolve) => setDialog({ title, label, value, resolve }))
@@ -108,6 +123,17 @@ export function StoryStudio() {
       setFormat(q.getSelection() ? q.getFormat() : {})
     }
     q.on('selection-change', refreshUi)
+    q.root.addEventListener('click', (e) => {
+      if (e.target.tagName === 'IMG') {
+        const blot = Quill.find(e.target)
+        if (!blot) return
+        const index = q.getIndex(blot)
+        q.setSelection(index, 1, 'user')
+        setImageSel({ index, el: e.target })
+      } else {
+        setImageSel(null)
+      }
+    })
     q.on('text-change', (_delta, _old, source) => {
       refreshUi()
       setHeadings(extractHeadings(q.getContents().ops))
@@ -473,6 +499,39 @@ export function StoryStudio() {
                 <Tool title="Strikethrough" active={format.strike} onClick={() => toggle('strike')}><Strikethrough className="h-4 w-4" /></Tool>
                 <Tool title="Clear formatting" onClick={clearFormatting}><RemoveFormatting className="h-4 w-4" /></Tool>
               </Group>
+              <Group label="Typeface">
+                <CaseSensitive className="mx-1 h-4 w-4 text-muted" aria-hidden />
+                <select
+                  className="mx-0.5 h-8 w-40 rounded-md border border-line bg-surface px-2 text-sm"
+                  title="Font for selected text"
+                  value={format.font || ''}
+                  onChange={(e) => {
+                    q().format('font', e.target.value || false, 'user')
+                    setFormat(q().getFormat())
+                  }}
+                >
+                  <option value="">Story font</option>
+                  {FONTS.map((f) => (
+                    <option key={f.id} value={f.family} style={{ fontFamily: f.family }}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="mx-0.5 h-8 w-20 rounded-md border border-line bg-surface px-2 text-sm"
+                  title="Size for selected text"
+                  value={format.size || ''}
+                  onChange={(e) => {
+                    q().format('size', e.target.value || false, 'user')
+                    setFormat(q().getFormat())
+                  }}
+                >
+                  <option value="">Size</option>
+                  {TEXT_SIZES.map((sz) => (
+                    <option key={sz} value={sz}>{parseInt(sz, 10)}</option>
+                  ))}
+                </select>
+              </Group>
               <Group label="Paragraph">
                 <Tool title="Bullets" active={format.list === 'bullet'} onClick={() => toggle('list', 'bullet')}><List className="h-4 w-4" /></Tool>
                 <Tool title="Numbering" active={format.list === 'ordered'} onClick={() => toggle('list', 'ordered')}><ListOrdered className="h-4 w-4" /></Tool>
@@ -610,10 +669,64 @@ export function StoryStudio() {
         <div className="min-w-0 flex-1 overflow-y-auto bg-bg-2 px-3 py-6" onClick={(e) => e.target === e.currentTarget && q().focus()}>
           {!story && <Spinner />}
           <div
-            className="studio-page mx-auto rounded-sm bg-page shadow-[0_10px_40px_-10px_rgba(0,0,0,0.45)]"
-            style={{ maxWidth: 816 * zoom, padding: `${64 * zoom}px ${Math.min(96, 72 * zoom)}px`, fontSize: `${zoom}rem` }}
+            ref={pageRef}
+            className="studio-page relative mx-auto rounded-sm bg-page shadow-[0_10px_40px_-10px_rgba(0,0,0,0.45)]"
+            style={{
+              maxWidth: 816 * zoom,
+              padding: `${64 * zoom}px ${Math.min(96, 72 * zoom)}px`,
+              fontSize: `${(story?.font_size || 18) * zoom}px`,
+              fontFamily: fontStack(story?.font_family),
+            }}
           >
             <div ref={editorEl} />
+            {imageSel && pageRef.current && imageSel.el.isConnected && (
+              <ImageToolbar
+                sel={imageSel}
+                page={pageRef.current}
+                format={format}
+                onWidth={(w) => {
+                  q().formatText(imageSel.index, 1, 'width', w, 'user')
+                  setFormat(q().getFormat(imageSel.index, 1))
+                }}
+                onAlign={(a) => {
+                  q().formatLine(imageSel.index, 1, 'align', a === 'left' ? false : a, 'user')
+                  setFormat(q().getFormat(imageSel.index, 1))
+                }}
+                onAlt={() => {
+                  const alt = window.prompt('Describe this image (for screen readers):', imageSel.el.getAttribute('alt') || '')
+                  if (alt !== null) q().formatText(imageSel.index, 1, 'alt', alt.trim() || false, 'user')
+                }}
+                onReplace={() => replaceInput.current?.click()}
+                onDelete={() => {
+                  q().deleteText(imageSel.index, 1, 'user')
+                  setImageSel(null)
+                }}
+              />
+            )}
+            <input
+              ref={replaceInput}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              hidden
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (!file || !imageSel) return
+                const width = q().getFormat(imageSel.index, 1).width
+                const form = new FormData()
+                form.append('image', file)
+                try {
+                  const { url } = await api.upload('admin/images/', form)
+                  q().deleteText(imageSel.index, 1, 'user')
+                  q().insertEmbed(imageSel.index, 'image', url, 'user')
+                  if (width) q().formatText(imageSel.index, 1, 'width', width, 'user')
+                  setImageSel(null)
+                  toast('Image replaced.')
+                } catch (err) {
+                  toast(err, 'error')
+                }
+              }}
+            />
           </div>
         </div>
       </div>
@@ -709,6 +822,68 @@ function Tool({ title, active, onClick, children }) {
   )
 }
 
+/** Small floating toolbar for the clicked image: size, alignment, description, replace, delete. */
+function ImageToolbar({ sel, page, format, onWidth, onAlign, onAlt, onReplace, onDelete }) {
+  const pageBox = page.getBoundingClientRect()
+  const box = sel.el.getBoundingClientRect()
+  const top = Math.max(4, box.top - pageBox.top - 48)
+  const left = Math.min(Math.max(4, box.left - pageBox.left + box.width / 2 - 190), pageBox.width - 384)
+  const btn = (active) => `grid h-8 min-w-8 place-items-center rounded-md px-2 text-xs font-medium ${active ? 'bg-brand text-white' : 'hover:bg-surface-2'}`
+  return (
+    <div
+      className="absolute z-20 flex w-[380px] items-center gap-0.5 rounded-xl border border-line bg-surface p-1 shadow-2xl"
+      style={{ top, left }}
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      {IMAGE_WIDTHS.map((w) => (
+        <button key={w.value} type="button" title={`${w.label} (${w.value})`} className={btn((format.width || '100%') === w.value)} onClick={() => onWidth(w.value)}>
+          {w.label.split(' ')[0]}
+        </button>
+      ))}
+      <span className="mx-1 h-6 w-px bg-line" />
+      <button type="button" title="Align left" className={btn(!format.align)} onClick={() => onAlign('left')}><AlignLeft className="h-4 w-4" /></button>
+      <button type="button" title="Center" className={btn(format.align === 'center')} onClick={() => onAlign('center')}><AlignCenter className="h-4 w-4" /></button>
+      <button type="button" title="Align right" className={btn(format.align === 'right')} onClick={() => onAlign('right')}><AlignRight className="h-4 w-4" /></button>
+      <span className="mx-1 h-6 w-px bg-line" />
+      <button type="button" title="Image description" className={btn(false)} onClick={onAlt}><Captions className="h-4 w-4" /></button>
+      <button type="button" title="Replace image" className={btn(false)} onClick={onReplace}><RefreshCw className="h-4 w-4" /></button>
+      <button type="button" title="Delete image" className={`${btn(false)} hover:text-rose-400`} onClick={onDelete}><Trash2 className="h-4 w-4" /></button>
+    </div>
+  )
+}
+
+/** Story-wide reading font and size, with a live sample. */
+export function TypographyPicker({ family, size, onChange }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm font-medium">Reading font</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {FONTS.map((f) => (
+          <button
+            type="button"
+            key={f.id}
+            onClick={() => onChange({ font_family: f.id })}
+            className={`rounded-xl border p-2.5 text-left transition ${family === f.id ? 'border-brand bg-brand/10 ring-2 ring-brand/25' : 'border-line hover:border-muted'}`}
+          >
+            <span className="block text-lg leading-tight" style={{ fontFamily: fontStack(f.id) }}>{f.label}</span>
+            <span className="block text-[11px] text-muted">{f.kind}</span>
+          </button>
+        ))}
+      </div>
+      <label className="block">
+        <span className="flex items-center justify-between text-sm">
+          <span className="font-medium">Text size</span>
+          <span className="font-semibold">{size}px</span>
+        </span>
+        <input type="range" min="14" max="26" value={size} onChange={(e) => onChange({ font_size: Number(e.target.value) })} className="mt-2 w-full accent-[var(--brand)]" />
+      </label>
+      <p className="rounded-xl border border-line bg-page p-3 text-page-ink" style={{ fontFamily: fontStack(family), fontSize: size, lineHeight: 1.75 }}>
+        Ang ulan ay bumuhos nang walang tigil, at sa bawat patak ay may kuwentong naghihintay.
+      </p>
+    </div>
+  )
+}
+
 function Big({ icon: Icon, label, onClick, active }) {
   return (
     <button
@@ -763,6 +938,8 @@ function SettingsDrawer({ story, genres, columns, onClose, onSave, onUploadCover
     price: story.price,
     preview_page_count: story.preview_page_count,
     column_id: story.column?.id ?? '',
+    font_family: story.font_family || 'literata',
+    font_size: story.font_size || 18,
   })
   const [genreIds, setGenreIds] = useState(new Set(story.genres.map((g) => g.id)))
   const [busy, setBusy] = useState(false)
@@ -816,6 +993,11 @@ function SettingsDrawer({ story, genres, columns, onClose, onSave, onUploadCover
               <input className="input" type="number" min="0" value={form.preview_page_count} onChange={set('preview_page_count')} />
             </Field>
           </div>
+          <TypographyPicker
+            family={form.font_family}
+            size={Number(form.font_size)}
+            onChange={(patch) => setForm({ ...form, ...patch })}
+          />
           <button
             className="btn-primary w-full"
             disabled={busy}
@@ -826,6 +1008,7 @@ function SettingsDrawer({ story, genres, columns, onClose, onSave, onUploadCover
                 price: form.price === '' ? '0' : String(form.price),
                 preview_page_count: Number(form.preview_page_count) || 0,
                 column_id: form.column_id === '' ? null : Number(form.column_id),
+                font_size: Number(form.font_size),
                 genre_ids: [...genreIds],
               })
               setBusy(false)

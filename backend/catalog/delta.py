@@ -112,11 +112,16 @@ def truncate_paragraphs(ops, limit):
 
 
 def paragraphs_to_ops(paragraphs):
-    """Build a Delta from [(runs, block_attrs)] where runs is [(text, inline_attrs)]."""
+    """Build a Delta from [(runs, block_attrs)] where runs is [(text, inline_attrs)].
+
+    A run's text may also be an embed such as {"image": url}.
+    """
     ops = []
     for runs, block_attrs in paragraphs:
         for text, attrs in runs:
-            if text:
+            if isinstance(text, dict):
+                ops.append(_op(text, attrs or None))
+            elif text:
                 ops.append(_op(text.replace("\n", " "), attrs or None))
         ops.append(_op("\n", block_attrs or None))
     return normalize(ops)

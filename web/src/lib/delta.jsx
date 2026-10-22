@@ -1,6 +1,10 @@
 // Renders a Quill Delta (the format the Story Studio saves) as React elements.
 // Built from elements rather than innerHTML so story text can never inject markup.
 
+import { FONT_FAMILIES, IMAGE_WIDTHS, TEXT_SIZES } from './fonts'
+
+const WIDTHS = IMAGE_WIDTHS.map((w) => w.value)
+
 function splitLines(ops) {
   const lines = []
   let runs = []
@@ -28,13 +32,18 @@ function splitLines(ops) {
 
 function Run({ text, image, attrs }) {
   if (image) {
-    return <img src={image} alt={attrs.alt || ''} loading="lazy" decoding="async" className="story-image" />
+    const width = WIDTHS.includes(attrs.width) ? attrs.width : undefined
+    return <img src={image} alt={attrs.alt || ''} loading="lazy" decoding="async" className="story-image" style={width ? { width } : undefined} />
   }
   let node = text
   if (attrs.bold) node = <strong>{node}</strong>
   if (attrs.italic) node = <em>{node}</em>
   if (attrs.underline) node = <u>{node}</u>
   if (attrs.strike) node = <s>{node}</s>
+  // Font and size chosen in the Studio for this text (only known values are applied).
+  const font = FONT_FAMILIES.includes(attrs.font) ? `'${attrs.font}', serif` : undefined
+  const size = TEXT_SIZES.includes(attrs.size) ? attrs.size : undefined
+  if (font || size) node = <span style={{ fontFamily: font, fontSize: size }}>{node}</span>
   if (typeof attrs.link === 'string' && /^https?:\/\//.test(attrs.link)) {
     node = (
       <a href={attrs.link} target="_blank" rel="noreferrer noopener" className="text-brand underline">
@@ -63,7 +72,8 @@ function Line({ line }) {
   return <p style={style}>{content}</p>
 }
 
-export function DeltaView({ ops }) {
+/** `fontFamily` / `fontSize` set the story's default reading typography. */
+export function DeltaView({ ops, fontFamily, fontSize }) {
   const lines = splitLines(ops)
   const blocks = []
   for (let i = 0; i < lines.length; i++) {
@@ -80,7 +90,11 @@ export function DeltaView({ ops }) {
       blocks.push(<Line key={i} line={lines[i]} />)
     }
   }
-  return <div className="prose-story">{blocks}</div>
+  return (
+    <div className="prose-story" style={{ fontFamily, fontSize: fontSize ? `${fontSize}px` : undefined }}>
+      {blocks}
+    </div>
+  )
 }
 
 export function wordCount(text) {

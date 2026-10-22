@@ -13,6 +13,7 @@ router.register("stories", views.AdminStoryViewSet, basename="admin-story")
 urlpatterns = [
     # Declared before the router so "import" isn't captured as a story pk.
     path("stories/import/", views.AdminStoryImportView.as_view()),
+    path("stories/import-one/", views.AdminImportOneView.as_view()),
     path("images/", ImageUploadView.as_view()),
     path("about/", AdminAboutView.as_view()),
     path("stories/<int:story_id>/chapters/", views.AdminChapterListView.as_view()),

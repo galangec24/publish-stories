@@ -163,7 +163,7 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 @media print { body.protected { display: none !important; } }
 
 /* --- Quill editor (Story Studio) ---------------------------------------- */
-.studio-page .ql-container { font-family: var(--font-read); font-size: 1.1rem; border: none !important; }
+.studio-page .ql-container { font-family: inherit; font-size: inherit; border: none !important; }
 .studio-page .ql-editor { min-height: 60vh; padding: 0; line-height: 1.8; color: var(--page-ink); }
 .studio-page .ql-editor.ql-blank::before { color: var(--muted); font-style: italic; left: 0; }
 .studio-page .ql-editor h1, .studio-page .ql-editor h2, .studio-page .ql-editor h3 { font-family: var(--font-display); }
@@ -268,3 +268,7 @@ body::before { animation: aurora-drift 22s ease-in-out infinite alternate; }
   body::before { animation: none; }
   .tile-3d { transform: none; }
 }
+
+/* Clicked image in the Studio */
+.studio-page .ql-editor img { cursor: pointer; transition: outline-color 0.15s; outline: 2px solid transparent; outline-offset: 3px; }
+.studio-page .ql-editor img:hover { outline-color: color-mix(in srgb, var(--brand) 50%, transparent); }

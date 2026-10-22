@@ -8,6 +8,7 @@ import { GenreTags, Spinner, useToast } from '../components/ui'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { DeltaView } from '../lib/delta'
+import { fontStack } from '../lib/fonts'
 import { formatCount, READING_MODES, useReadingMode } from '../lib/readingMode'
 import { useAsync } from '../lib/useAsync'
 
@@ -103,7 +104,7 @@ export function StoryPage() {
         Chapter {index + 1} of {s.chapters.length}
       </p>
       <h2 className="mt-2 mb-8 font-display text-3xl text-page-ink">{chapter?.title}</h2>
-      {chapter?.content && <DeltaView ops={chapter.content} />}
+      {chapter?.content && <DeltaView ops={chapter.content} fontFamily={fontStack(s.font_family)} fontSize={s.font_size} />}
       {showPaywall && (
         <Paywall story={s} paying={paying} onUnlock={unlock} onRefresh={story.reload} signedIn={!!user} />
       )}

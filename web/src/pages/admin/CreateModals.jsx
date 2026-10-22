@@ -2,6 +2,8 @@ import {
   AlignLeft,
   BookPlus,
   Coins,
+  FileText,
+  FileUp,
   FolderPlus,
   Gift,
   Globe2,
@@ -11,6 +13,7 @@ import {
   PenLine,
   Plus,
   Type,
+  Upload,
   X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -19,6 +22,7 @@ import { useNavigate } from 'react-router-dom'
 import { IconInput, Modal } from '../../components/Modal'
 import { GenreChips, useToast } from '../../components/ui'
 import { api } from '../../lib/api'
+import { TypographyPicker } from './StoryStudio'
 
 const PRICE_PRESETS = [29, 49, 99, 149]
 
@@ -109,15 +113,37 @@ export function NewStoryModal({ open, onClose }) {
   const [busy, setBusy] = useState(false)
   const [cover, setCover] = useState(null) // { file, url }
   const [form, setForm] = useState(blank())
+  const [mode, setMode] = useState('write') // 'write' | 'upload'
+  const [manuscript, setManuscript] = useState(null) // File
+  const [split, setSplit] = useState('auto')
+  const [preview, setPreview] = useState(null)
+  const [previewing, setPreviewing] = useState(false)
+  const [chapterTitles, setChapterTitles] = useState([])
+  const manuscriptInput = useRef(null)
 
   function blank() {
-    return { title: '', author_name: '', synopsis: '', genre_ids: new Set(), column_id: '', paid: false, price: 49, preview_page_count: 3 }
+    return {
+      title: '',
+      author_name: '',
+      synopsis: '',
+      genre_ids: new Set(),
+      column_id: '',
+      paid: false,
+      price: 49,
+      preview_page_count: 3,
+      font_family: 'literata',
+      font_size: 18,
+    }
   }
 
   useEffect(() => {
     if (!open) return
     setForm(blank())
     setCover(null)
+    setMode('write')
+    setManuscript(null)
+    setPreview(null)
+    setSplit('auto')
     Promise.all([api.get('admin/genres/'), api.get('admin/columns/')])
       .then(([g, c]) => {
         setGenres(g)
@@ -134,26 +160,66 @@ export function NewStoryModal({ open, onClose }) {
   const firstGenre = genres.find((g) => form.genre_ids.has(g.id))
   const priceError = form.paid && !freeByColumn && Number(form.price) < 20 ? 'PayMongo requires at least ₱20.' : ''
 
+  /** Ask the server how the manuscript would be split (nothing is saved). */
+  async function analyse(file, splitMode) {
+    if (!file) return
+    const data = new FormData()
+    data.append('file', file)
+    data.append('split', splitMode)
+    data.append('preview', 'true')
+    setPreviewing(true)
+    try {
+      const result = await api.upload('admin/stories/import-one/', data)
+      setPreview(result)
+      setChapterTitles(result.chapters.map((c) => c.title))
+      // Fill empty details from the manuscript; anything typed already is kept.
+      setForm((f) => ({
+        ...f,
+        title: f.title || result.title || '',
+        author_name: f.author_name || result.author_name || '',
+        synopsis: f.synopsis || result.synopsis || '',
+      }))
+    } catch (err) {
+      setPreview(null)
+      toast(err, 'error')
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
   async function create(e) {
     e?.preventDefault()
     if (priceError) return
     setBusy(true)
+    const details = {
+      title: form.title.trim(),
+      author_name: form.author_name.trim(),
+      synopsis: form.synopsis.trim(),
+      genre_ids: [...form.genre_ids],
+      column_id: form.column_id ? Number(form.column_id) : null,
+      price: form.paid && !freeByColumn ? String(form.price) : '0',
+      preview_page_count: Number(form.preview_page_count) || 0,
+      font_family: form.font_family,
+      font_size: Number(form.font_size),
+    }
     try {
-      const story = await api.post('admin/stories/', {
-        title: form.title.trim(),
-        author_name: form.author_name.trim(),
-        synopsis: form.synopsis.trim(),
-        genre_ids: [...form.genre_ids],
-        column_id: form.column_id ? Number(form.column_id) : null,
-        price: form.paid && !freeByColumn ? String(form.price) : '0',
-        preview_page_count: Number(form.preview_page_count) || 0,
-      })
+      let story
+      if (mode === 'upload') {
+        const data = new FormData()
+        data.append('file', manuscript)
+        data.append('split', split)
+        data.append('chapter_titles', JSON.stringify(chapterTitles))
+        data.append('story', JSON.stringify(details))
+        story = await api.upload('admin/stories/import-one/', data)
+      } else {
+        story = await api.post('admin/stories/', details)
+      }
       if (cover) {
         const data = new FormData()
         data.append('cover_image', cover.file)
         await api.upload(`admin/stories/${story.id}/`, data, 'PATCH').catch(() => toast('Story created, but the cover could not be uploaded.', 'error'))
       }
-      toast(`“${story.title}” created. Start writing!`)
+      toast(mode === 'upload' ? `“${story.title}” imported with ${story.chapters.length} chapters. Edit anything in the Studio.` : `“${story.title}” created. Start writing!`)
       onClose()
       navigate(`/admin/stories/${story.id}`)
     } catch (err) {
@@ -176,13 +242,118 @@ export function NewStoryModal({ open, onClose }) {
           <>
             <span className="mr-auto hidden text-xs text-muted sm:block">Saved as a draft until you publish.</span>
             <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-            <button form="story-form" className="btn-primary" disabled={busy || !form.title.trim() || Boolean(priceError)}>
-              <PenLine className="h-4 w-4" /> {busy ? 'Creating…' : 'Create & start writing'}
+            <button
+              form="story-form"
+              className="btn-primary"
+              disabled={busy || !form.title.trim() || Boolean(priceError) || (mode === 'upload' && (!preview || previewing))}
+            >
+              {mode === 'upload' ? <FileUp className="h-4 w-4" /> : <PenLine className="h-4 w-4" />}
+              {busy ? (mode === 'upload' ? 'Importing…' : 'Creating…') : mode === 'upload' ? 'Import & open in Studio' : 'Create & start writing'}
             </button>
           </>
         }
       >
         <form id="story-form" onSubmit={create} className="grid gap-8 md:grid-cols-[220px_1fr]">
+          <div className="space-y-4 md:col-span-2">
+            <div className="grid gap-2 sm:grid-cols-2">
+              {[
+                ['write', PenLine, 'Write it myself', 'Start with a blank first chapter'],
+                ['upload', Upload, 'Upload a manuscript', 'Word (.docx), Markdown or text: chapters and pictures are kept'],
+              ].map(([id, Icon, label, hint]) => (
+                <button
+                  type="button"
+                  key={id}
+                  onClick={() => setMode(id)}
+                  className={`group flex items-start gap-3 rounded-2xl border p-4 text-left transition ${mode === id ? 'border-brand bg-brand/10 ring-2 ring-brand/25' : 'border-line hover:border-muted'}`}
+                >
+                  <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${mode === id ? 'tile-3d' : 'bg-surface-2 text-muted'}`}>
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <span>
+                    <span className="block font-semibold">{label}</span>
+                    <span className="block text-xs text-muted">{hint}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {mode === 'upload' && (
+              <div className="space-y-3 rounded-2xl border border-line bg-surface-2/40 p-4">
+                <input
+                  ref={manuscriptInput}
+                  type="file"
+                  accept=".docx,.md,.markdown,.txt"
+                  hidden
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    e.target.value = ''
+                    if (!file) return
+                    setManuscript(file)
+                    analyse(file, split)
+                  }}
+                />
+                <div className="flex flex-wrap items-center gap-3">
+                  <button type="button" className="btn-ghost" onClick={() => manuscriptInput.current?.click()}>
+                    <FileText className="h-4 w-4" /> {manuscript ? 'Choose another file' : 'Choose manuscript'}
+                  </button>
+                  {manuscript && <span className="truncate text-sm font-medium">{manuscript.name}</span>}
+                  <label className="ml-auto flex items-center gap-2 text-sm">
+                    <span className="text-muted">Split chapters by</span>
+                    <select
+                      className="input !w-auto !py-1.5"
+                      value={split}
+                      onChange={(e) => {
+                        setSplit(e.target.value)
+                        analyse(manuscript, e.target.value)
+                      }}
+                    >
+                      <option value="auto">Automatic</option>
+                      <option value="headings">Headings (Heading 1 / #)</option>
+                      <option value="chapter_lines">“Chapter 1 / Kabanata 1” lines</option>
+                      <option value="page_breaks">Page breaks (Word)</option>
+                      <option value="none">Don&apos;t split (one chapter)</option>
+                    </select>
+                  </label>
+                </div>
+                {previewing && <p className="text-sm text-muted">Reading your manuscript…</p>}
+                {!manuscript && !previewing && (
+                  <p className="text-xs text-muted">
+                    Pictures in Word documents are kept where they appear. After importing, everything (text, chapters,
+                    pictures) can still be edited in the Studio.
+                  </p>
+                )}
+                {preview && !previewing && (
+                  <div>
+                    <p className="mb-2 text-sm">
+                      <strong>{preview.chapters.length}</strong> chapter{preview.chapters.length === 1 ? '' : 's'}
+                      {preview.image_count > 0 && <> · <strong>{preview.image_count}</strong> picture{preview.image_count === 1 ? '' : 's'}</>}
+                      <span className="text-muted"> · rename chapters below if you like</span>
+                    </p>
+                    <ol className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                      {preview.chapters.map((c, i) => (
+                        <li key={i} className="rounded-xl border border-line bg-surface p-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand/15 text-xs font-bold text-brand">{i + 1}</span>
+                            <input
+                              className="input !py-1.5 font-medium"
+                              value={chapterTitles[i] ?? ''}
+                              maxLength={200}
+                              onChange={(e) => setChapterTitles((t) => t.map((x, j) => (j === i ? e.target.value : x)))}
+                              aria-label={`Chapter ${i + 1} title`}
+                            />
+                            <span className="shrink-0 text-xs text-muted">
+                              {c.word_count.toLocaleString()} words{c.images ? ` · ${c.images} pic` : ''}
+                            </span>
+                          </div>
+                          {c.excerpt && <p className="mt-1.5 line-clamp-2 pl-8 text-xs text-muted">{c.excerpt}</p>}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           {/* Live cover preview + cover upload */}
           <div className="mx-auto w-48 md:w-full">
             <div className="[perspective:900px]">
@@ -322,6 +493,13 @@ export function NewStoryModal({ open, onClose }) {
                 </>
               )}
             </div>
+          </div>
+          <div className="md:col-span-2">
+            <TypographyPicker
+              family={form.font_family}
+              size={Number(form.font_size)}
+              onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+            />
           </div>
         </form>
       </Modal>

@@ -72,6 +72,21 @@ class Story(models.Model):
         default=3, help_text="Paragraphs shown to readers who haven't unlocked the story"
     )
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="PHP; 0 means free")
+    # Reading typography chosen by the author; readers see the story in this font and size.
+    font_family = models.CharField(
+        max_length=20,
+        default="literata",
+        choices=[
+            ("literata", "Literata"),
+            ("lora", "Lora"),
+            ("merriweather", "Merriweather"),
+            ("playfair", "Playfair Display"),
+            ("source_serif", "Source Serif"),
+            ("inter", "Inter"),
+            ("nunito", "Nunito"),
+        ],
+    )
+    font_size = models.PositiveSmallIntegerField(default=18, help_text="Base reading size in px (14-26)")
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT, db_index=True)
     published_at = models.DateTimeField(null=True, blank=True)
     word_count = models.PositiveIntegerField(default=0)

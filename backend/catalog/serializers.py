@@ -44,6 +44,8 @@ class StoryListSerializer(serializers.ModelSerializer):
             "price",
             "is_free",
             "preview_page_count",
+            "font_family",
+            "font_size",
             "word_count",
             "view_count",
             "reader_count",
@@ -100,6 +102,11 @@ class AdminStorySerializer(StoryListSerializer):
         ]
         read_only_fields = ["word_count", "view_count", "reader_count", "published_at", "created_at", "updated_at"]
         extra_kwargs = {"slug": {"required": False}}
+
+    def validate_font_size(self, value):
+        if not 14 <= value <= 26:
+            raise serializers.ValidationError("Choose a size between 14 and 26.")
+        return value
 
     def validate_price(self, value):
         if value < 0:

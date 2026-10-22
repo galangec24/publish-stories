@@ -16,6 +16,7 @@ from rest_framework.views import APIView
 from accounts.permissions import IsAdmin
 from notifications.service import notify
 
+from . import delta
 from .importers import ManuscriptError, import_manuscript
 from .models import Chapter, Column, Genre, Story
 from .serializers import (
@@ -303,3 +304,99 @@ class AdminStoryImportView(APIView):
             genres=sorted({g.name for g in genres}),
         )
         return result
+
+
+class AdminImportOneView(APIView):
+    """POST /api/admin/stories/import-one/ — one manuscript → one story, with a preview step.
+
+    multipart fields:
+      file            .docx / .md / .txt
+      split           auto | headings | chapter_lines | page_breaks | none
+      preview         "true" → only report what would be created (nothing is saved)
+      chapter_titles  JSON list overriding detected chapter titles (create only)
+      story           JSON with title, author_name, synopsis, genre_ids, column_id,
+                      price, preview_page_count, font_family, font_size (create only)
+    Word pictures are stored as story images and placed where they appeared.
+    """
+
+    permission_classes = [IsAdmin]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        from .images import InvalidImage, image_url, store_image
+        from .importers import SPLIT_MODES
+
+        upload = request.FILES.get("file")
+        if not upload:
+            return Response({"file": ["Choose a manuscript (.docx, .md or .txt)."]}, status=400)
+        if upload.size > settings.IMPORT_MAX_FILE_BYTES:
+            return Response({"file": ["File is too large (max 10 MB)."]}, status=400)
+        split = request.data.get("split") or "auto"
+        if split not in SPLIT_MODES:
+            return Response({"split": ["Unknown chapter split."]}, status=400)
+        raw = upload.read()
+
+        if str(request.data.get("preview", "")).lower() in {"1", "true"}:
+            try:
+                manuscript = import_manuscript(upload.name, raw, split=split)
+            except ManuscriptError as exc:
+                return Response({"file": [str(exc)]}, status=400)
+            return Response(
+                {
+                    "title": manuscript.title,
+                    "author_name": manuscript.author_name,
+                    "synopsis": manuscript.synopsis,
+                    "genres": manuscript.genres,
+                    "image_count": manuscript.image_count,
+                    "chapters": [
+                        {
+                            "title": c.title,
+                            "word_count": delta.word_count(c.content),
+                            "images": c.images,
+                            "excerpt": " ".join(delta.plain_text(c.content).split())[:180],
+                        }
+                        for c in manuscript.chapters
+                    ],
+                }
+            )
+
+        try:
+            fields = json.loads(request.data.get("story") or "{}")
+            titles = json.loads(request.data.get("chapter_titles") or "[]")
+            if not isinstance(fields, dict) or not isinstance(titles, list):
+                raise ValueError
+        except ValueError:
+            return Response({"story": ["Invalid story details."]}, status=400)
+
+        with transaction.atomic():
+
+            def save_image(blob):
+                try:
+                    return image_url(request, store_image(blob, request.user))
+                except InvalidImage:
+                    return None  # skip pictures Pillow can't read (e.g. vector formats)
+
+            try:
+                manuscript = import_manuscript(upload.name, raw, split=split, save_image=save_image)
+            except ManuscriptError as exc:
+                raise ValidationError({"file": [str(exc)]}) from exc  # rolls back any saved pictures
+
+            data = {
+                "title": fields.get("title") or manuscript.title,
+                "author_name": fields.get("author_name", manuscript.author_name),
+                "synopsis": fields.get("synopsis", manuscript.synopsis),
+                **{k: fields[k] for k in ("genre_ids", "column_id", "price", "preview_page_count", "font_family", "font_size") if k in fields},
+            }
+            serializer = AdminStorySerializer(data=data, context={"request": request})
+            serializer.is_valid(raise_exception=True)
+            story = serializer.save(created_by=request.user)
+            for index, chapter in enumerate(manuscript.chapters):
+                title = titles[index].strip() if index < len(titles) and isinstance(titles[index], str) and titles[index].strip() else chapter.title
+                Chapter.objects.create(story=story, title=title[:200], order=index, content=chapter.content)
+            story.refresh_word_count()
+        story = self.get_story(story.pk)
+        return Response(AdminStorySerializer(story, context={"request": request}).data, status=status.HTTP_201_CREATED)
+
+    @staticmethod
+    def get_story(pk):
+        return Story.objects.select_related("column").prefetch_related("genres", "chapters").get(pk=pk)
