@@ -75,7 +75,22 @@ ASGI_APPLICATION = "config.asgi.application"
 REDIS_URL = os.environ.get("REDIS_URL", "")
 CHANNEL_LAYERS = {
     "default": (
-        {"BACKEND": "channels_redis.core.RedisChannelLayer", "CONFIG": {"hosts": [REDIS_URL]}}
+        {
+            # Pub/sub listens for events instead of polling with blocking reads,
+            # which timed out on idle sockets ("Timeout reading from red-…").
+            # Health checks and keep-alive stop idle connections being dropped.
+            "BACKEND": "channels_redis.pubsub.RedisPubSubChannelLayer",
+            "CONFIG": {
+                "hosts": [
+                    {
+                        "address": REDIS_URL,
+                        "health_check_interval": 25,
+                        "socket_keepalive": True,
+                        "retry_on_timeout": True,
+                    }
+                ]
+            },
+        }
         if REDIS_URL
         else {"BACKEND": "channels.layers.InMemoryChannelLayer"}
     )
