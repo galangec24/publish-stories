@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { Field, Spinner, useToast } from '../../components/ui'
 import { api } from '../../lib/api'
 import { useAsync } from '../../lib/useAsync'
+import { ColumnModal } from './CreateModals'
 
 function EditorModal({ title, children, onClose, onSave }) {
   return (
@@ -107,20 +108,8 @@ export function Genres() {
 }
 
 export function Columns() {
-  const toast = useToast()
   const list = useAsync(() => api.get('admin/columns/'), [])
   const [edit, setEdit] = useState(null)
-
-  async function save() {
-    const { id, ...body } = edit
-    try {
-      id ? await api.patch(`admin/columns/${id}/`, body) : await api.post('admin/columns/', body)
-      setEdit(null)
-      list.reload()
-    } catch (e) {
-      toast(e, 'error')
-    }
-  }
 
   return (
     <div>
@@ -151,16 +140,7 @@ export function Columns() {
           ))}
         </div>
       )}
-      {edit && (
-        <EditorModal title={edit.id ? 'Edit column' : 'New column'} onClose={() => setEdit(null)} onSave={save}>
-          <Field label="Title"><input className="input" required value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} /></Field>
-          <Field label="Description"><textarea className="input" rows={3} value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} /></Field>
-          <label className="flex items-center gap-3 text-sm">
-            <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={edit.is_public} onChange={(e) => setEdit({ ...edit, is_public: e.target.checked })} />
-            Public (stories here are free for everyone)
-          </label>
-        </EditorModal>
-      )}
+      <ColumnModal open={Boolean(edit)} initial={edit} onClose={() => setEdit(null)} onSaved={() => list.reload()} />
     </div>
   )
 }

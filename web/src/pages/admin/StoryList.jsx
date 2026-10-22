@@ -1,15 +1,15 @@
-import { Eye, Library, UsersRound } from 'lucide-react'
+import { BookPlus, Eye, FileUp, FolderPlus, Library, UsersRound } from 'lucide-react'
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 import { Spinner, useToast } from '../../components/ui'
 import { api } from '../../lib/api'
 import { formatCount } from '../../lib/readingMode'
 import { useAsync } from '../../lib/useAsync'
+import { ColumnModal, NewStoryModal } from './CreateModals'
 
 export function StoryList() {
   const toast = useToast()
-  const navigate = useNavigate()
   const [status, setStatus] = useState('')
   const [genre, setGenre] = useState('')
   const [q, setQ] = useState('')
@@ -22,28 +22,25 @@ export function StoryList() {
     [status, genre, search, ordering],
   )
 
-  async function create() {
-    const title = window.prompt('Title of the new story')
-    if (!title?.trim()) return
-    try {
-      const story = await api.post('admin/stories/', { title: title.trim() })
-      navigate(`/admin/stories/${story.id}`)
-    } catch (e) {
-      toast(e, 'error')
-    }
-  }
+  const [storyModal, setStoryModal] = useState(false)
+  const [columnModal, setColumnModal] = useState(false)
 
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="mr-auto font-display text-3xl">Stories</h1>
         <Link to="/admin/import" className="btn-ghost">
-          Bulk import
+          <FileUp className="h-4 w-4" /> Bulk import
         </Link>
-        <button className="btn-primary" onClick={create}>
-          + New story
+        <button className="btn-ghost" onClick={() => setColumnModal(true)}>
+          <FolderPlus className="h-4 w-4" /> New column
+        </button>
+        <button className="btn-primary" onClick={() => setStoryModal(true)}>
+          <BookPlus className="h-4 w-4" /> New story
         </button>
       </div>
+      <NewStoryModal open={storyModal} onClose={() => setStoryModal(false)} />
+      <ColumnModal open={columnModal} onClose={() => setColumnModal(false)} onSaved={() => toast('You can now pick this column when creating a story.')} />
 
       {stats.data && (
         <div className="mt-5 grid grid-cols-3 gap-3">

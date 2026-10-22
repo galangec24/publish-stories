@@ -200,3 +200,19 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 /* In book mode a picture must fit on one page */
 .book-flow .story-image { max-height: calc(max(420px, 100dvh - 300px) - 4rem); object-fit: contain; }
 .studio-page .ql-editor img { max-width: 100%; border-radius: 12px; display: inline-block; }
+
+/* Modal + auth page motion */
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+.text-shimmer {
+  background: linear-gradient(90deg, var(--ink), var(--accent), var(--brand), var(--ink));
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 6s linear infinite;
+}
