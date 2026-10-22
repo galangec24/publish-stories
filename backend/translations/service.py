@@ -55,7 +55,7 @@ def _google(texts, target):
         )
         if response.status_code != 200:
             raise TranslationError(f"Google Translate responded {response.status_code}: {response.text[:200]}")
-        out.extend(html.unescape(t["translatedText"]) for t in response.json()["data"]["translations"])
+        out.extend(html.unescape(t["translatedText"]).strip() for t in response.json()["data"]["translations"])
     return out
 
 
@@ -68,7 +68,7 @@ def _mymemory_one(text, target):
     data = response.json() if response.ok else {}
     if str(data.get("responseStatus")) != "200":
         raise TranslationError(f"MyMemory: {data.get('responseDetails') or response.status_code}")
-    return html.unescape(data["responseData"]["translatedText"])
+    return html.unescape(data["responseData"]["translatedText"]).strip()
 
 
 def _mymemory(texts, target):
