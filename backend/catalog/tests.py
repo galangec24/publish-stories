@@ -258,3 +258,37 @@ class ViewCountTests(APITestCase):
         response = self.client.patch("/api/user/me/", {"reading_mode": "book"}, format="json")
         self.assertEqual(response.data["reading_mode"], "book")
         self.assertEqual(self.client.patch("/api/user/me/", {"reading_mode": "scroll3d"}, format="json").status_code, 400)
+
+
+class AboutProfileTests(APITestCase):
+    def test_public_read_has_defaults_and_admin_can_edit(self):
+        data = self.client.get("/api/about/").data
+        self.assertEqual(data["name"], "Maria Gemima Valderrama")
+        self.assertEqual(len(data["roles"]), 4)
+        self.assertIn("sunstar.com.ph/author/maria-gemima-c-valderrama", data["links"][0]["url"])
+
+        admin = User.objects.create_user(email="a@example.com", password="x", is_admin=True)
+        self.client.force_authenticate(admin)
+        body = {**data, "tagline": "Writer · Davao", "roles": [{"icon": "pen", "title": "Author", "text": "Writes books."}]}
+        body.pop("icons")
+        saved = self.client.put("/api/admin/about/", body, format="json")
+        self.assertEqual(saved.status_code, 200, saved.data)
+        self.client.force_authenticate(None)
+        public = self.client.get("/api/about/").data
+        self.assertEqual(public["tagline"], "Writer · Davao")
+        self.assertEqual(public["roles"][0]["title"], "Author")
+
+    def test_validation_and_permissions(self):
+        reader = User.objects.create_user(email="r@example.com", password="x")
+        self.client.force_authenticate(reader)
+        self.assertEqual(self.client.put("/api/admin/about/", {}, format="json").status_code, 403)
+        admin = User.objects.create_user(email="a@example.com", password="x", is_admin=True)
+        self.client.force_authenticate(admin)
+        current = self.client.get("/api/admin/about/").data
+        bad = {k: current[k] for k in ["name", "tagline", "intro", "closing", "photo_url", "roles", "links", "blog_heading", "blog_intro", "blog_cards"]}
+        bad["roles"] = [{"icon": "rocket", "title": "x", "text": ""}]
+        bad["links"] = [{"label": "x", "url": "javascript:alert(1)"}]
+        response = self.client.put("/api/admin/about/", bad, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("roles", response.data)
+        self.assertIn("links", response.data)

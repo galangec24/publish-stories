@@ -163,3 +163,22 @@ class StoryImage(models.Model):
     size = models.PositiveIntegerField()
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class AboutProfile(models.Model):
+    """The home page's About Me and "From the Author's Desk" content (one row, pk=1)."""
+
+    name = models.CharField(max_length=120)
+    tagline = models.CharField(max_length=200, blank=True)
+    intro = models.TextField(blank=True)
+    closing = models.TextField(blank=True)
+    photo_url = models.CharField(max_length=500, blank=True)
+    roles = models.JSONField(default=list, blank=True)  # [{icon, title, text}]
+    links = models.JSONField(default=list, blank=True)  # [{label, url}]
+    blog_heading = models.CharField(max_length=200, blank=True)
+    blog_intro = models.TextField(blank=True)
+    blog_cards = models.JSONField(default=list, blank=True)  # [{icon, title, text}]
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"About {self.name}"

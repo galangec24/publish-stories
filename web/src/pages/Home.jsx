@@ -19,6 +19,7 @@ function prefersReducedMotion() {
 export function Home() {
   const { user } = useAuth()
   const home = useAsync(() => api.get('home/'), [user?.id, user?.preferred_genres?.length])
+  const about = useAsync(() => api.get('about/'), [])
   const [genreFilter, setGenreFilter] = useState(new Set())
   const [query, setQuery] = useState('')
   const [debounced, setDebounced] = useState('')
@@ -164,8 +165,8 @@ export function Home() {
         </>
       )}
 
-      <AuthorBlog stats={data?.stats} />
-      <AboutMe />
+      <AuthorBlog stats={data?.stats} about={about.data} />
+      <AboutMe about={about.data} />
     </>
   )
 }

@@ -1,9 +1,10 @@
-import { FileUp, FolderKanban, Library, MailQuestion, MessagesSquare, ReceiptText, Tags, UsersRound } from 'lucide-react'
+import { FileUp, FolderKanban, Library, MailQuestion, MessagesSquare, ReceiptText, Tags, UserRoundPen, UsersRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 
 import { api } from '../../lib/api'
 import { onLiveEvent } from '../../realtime/LiveProvider'
+import { AboutEditor } from './AboutEditor'
 import { BulkImport } from './BulkImport'
 import { EmailRequests } from './EmailRequests'
 import { Columns, Genres, Payments } from './Managers'
@@ -35,6 +36,7 @@ function AdminShell({ children }) {
     { to: '/admin/readers', label: 'Readers & payments', icon: UsersRound },
     { to: '/admin/support', label: 'Support inbox', icon: MessagesSquare, badge: badges.support },
     { to: '/admin/email-requests', label: 'Email requests', icon: MailQuestion, badge: badges.email },
+    { to: '/admin/about', label: 'About me', icon: UserRoundPen },
     { to: '/admin/genres', label: 'Genres', icon: Tags },
     { to: '/admin/columns', label: 'Columns', icon: FolderKanban },
     { to: '/admin/payments', label: 'Payment logs', icon: ReceiptText },
@@ -76,6 +78,7 @@ export default function AdminRoutes() {
       <Route path="readers" element={<AdminShell><ReadersMonitor /></AdminShell>} />
       <Route path="support" element={<AdminShell><SupportInbox /></AdminShell>} />
       <Route path="email-requests" element={<AdminShell><EmailRequests /></AdminShell>} />
+      <Route path="about" element={<AdminShell><AboutEditor /></AdminShell>} />
       <Route path="genres" element={<AdminShell><Genres /></AdminShell>} />
       <Route path="columns" element={<AdminShell><Columns /></AdminShell>} />
       <Route path="payments" element={<AdminShell><Payments /></AdminShell>} />
