@@ -1,3 +1,4 @@
+import os
 from unittest import mock
 
 from django.core.cache import cache
@@ -221,3 +222,17 @@ class OtpAntiSpamTests(APITestCase):
         self.assertEqual(second.status_code, 403)
         self.assertIn("already sent", second.data["detail"])
         self.assertEqual(EmailOTP.objects.filter(user=unverified).count(), 1)
+
+
+class EnsureAdminCommandTests(APITestCase):
+    def test_comma_separated_admins(self):
+        from django.core.management import call_command
+
+        with mock.patch.dict("os.environ", {"ADMIN_EMAIL": "Owner@Example.com, helper@example.com", "ADMIN_PASSWORD": PASSWORD}):
+            call_command("ensure_admin", stdout=open(os.devnull, "w"))
+            call_command("ensure_admin", stdout=open(os.devnull, "w"))  # idempotent
+        owner = User.objects.get(email="owner@example.com")
+        helper = User.objects.get(email="helper@example.com")
+        self.assertTrue(owner.is_admin and helper.is_admin)
+        self.assertTrue(owner.check_password(PASSWORD))
+        self.assertFalse(helper.has_usable_password())  # extra admins never share the password
