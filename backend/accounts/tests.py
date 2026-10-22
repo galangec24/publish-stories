@@ -81,9 +81,12 @@ class EmailAuthTests(APITestCase):
         login = self.client.post("/api/auth/login/", {"email": "reader@example.com", "password": "Bagong-Pass-2026"})
         self.assertEqual(login.status_code, 200)
 
-    def test_reset_for_unknown_email_is_generic(self):
+    def test_reset_for_unknown_email_stops_without_issuing_a_code(self):
         response = self.client.post("/api/auth/password/reset/", {"email": "nobody@example.com"})
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("No account", response.data["email"][0])
+        resend = self.client.post("/api/auth/resend-code/", {"email": "nobody@example.com", "purpose": "reset_password"})
+        self.assertEqual(resend.status_code, 404)
         self.assertFalse(EmailOTP.objects.exists())
 
 
@@ -146,3 +149,75 @@ class PreferenceTests(APITestCase):
         self.assertEqual(self.client.put("/api/user/theme/", {"theme_name": "sepia"}).status_code, 200)
         self.assertEqual(self.client.get("/api/user/me/").data["theme"], "sepia")
         self.assertEqual(self.client.put("/api/user/theme/", {"theme_name": "neon"}).status_code, 400)
+
+
+@override_settings(
+    OTP_RESEND_COOLDOWN_SECONDS=60, OTP_MAX_PER_HOUR=3, OTP_MAX_PER_DAY=5, OTP_GLOBAL_DAILY_LIMIT=1000, OTP_MAX_FAILED_PER_HOUR=4
+)
+class OtpAntiSpamTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.mail = CapturedCodes()
+        patcher = mock.patch("accounts.views.send_otp_email", self.mail)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.user = User.objects.create_user(email="r@example.com", password=PASSWORD, email_verified=True)
+
+    def reset(self):
+        cache.clear()  # isolate from the per-IP throttle
+        return self.client.post("/api/auth/password/reset/", {"email": "r@example.com"})
+
+    def age_codes(self, seconds):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        for otp in EmailOTP.objects.all():
+            EmailOTP.objects.filter(pk=otp.pk).update(created_at=otp.created_at - timedelta(seconds=seconds))
+
+    def test_cooldown_between_codes(self):
+        self.assertEqual(self.reset().status_code, 200)
+        second = self.reset()
+        self.assertEqual(second.status_code, 429)
+        self.assertEqual(second.data["code"], "otp_rate_limited")
+        self.assertTrue(0 < second.data["retry_after"] <= 60)
+        self.assertIn("Retry-After", second)
+
+    def test_hourly_cap(self):
+        for _ in range(3):
+            self.assertEqual(self.reset().status_code, 200)
+            self.age_codes(61)  # past the cooldown, still inside the hour
+        capped = self.reset()
+        self.assertEqual(capped.status_code, 429)
+        self.assertIn("too many codes", capped.data["detail"])
+
+    def test_global_daily_cap(self):
+        with override_settings(OTP_GLOBAL_DAILY_LIMIT=1):
+            self.assertEqual(self.reset().status_code, 200)
+            other = User.objects.create_user(email="o@example.com", password=PASSWORD, email_verified=True)
+            cache.clear()
+            response = self.client.post("/api/auth/password/reset/", {"email": other.email})
+            self.assertEqual(response.status_code, 429)
+
+    def test_lockout_after_repeated_wrong_codes(self):
+        self.reset()
+        code = self.mail.codes[("r@example.com", "reset_password")]
+        wrong = "000000" if code != "000000" else "111111"
+        body = {"email": "r@example.com", "code": wrong, "new_password": "Bagong-Pass-2026"}
+        for _ in range(4):
+            cache.clear()
+            self.assertEqual(self.client.post("/api/auth/password/reset/confirm/", body).status_code, 400)
+        cache.clear()
+        locked = self.client.post("/api/auth/password/reset/confirm/", {**body, "code": code})
+        self.assertEqual(locked.status_code, 429)
+        self.assertIn("Too many incorrect codes", locked.data["detail"])
+
+    def test_login_of_unverified_account_respects_limits(self):
+        unverified = User.objects.create_user(email="u@example.com", password=PASSWORD)
+        first = self.client.post("/api/auth/login/", {"email": unverified.email, "password": PASSWORD})
+        self.assertEqual(first.status_code, 403)
+        cache.clear()
+        second = self.client.post("/api/auth/login/", {"email": unverified.email, "password": PASSWORD})
+        self.assertEqual(second.status_code, 403)
+        self.assertIn("already sent", second.data["detail"])
+        self.assertEqual(EmailOTP.objects.filter(user=unverified).count(), 1)

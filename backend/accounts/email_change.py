@@ -21,6 +21,7 @@ from notifications.realtime import push_admins
 from notifications.service import first_name, notify, notify_admins
 
 from .models import EmailChangeRequest, EmailOTP
+from .otp_guard import check_code
 from .permissions import IsAdmin
 
 User = get_user_model()
@@ -128,9 +129,7 @@ class SendChangeCodeView(APIView):
             return Response({"detail": "Your email change hasn't been approved yet."}, status=400)
         if req.approval_expired:
             return Response({"detail": "This approval expired. Please send a new request."}, status=400)
-        if EmailOTP.in_cooldown(request.user, EmailOTP.Purpose.CHANGE_EMAIL):
-            return Response({"detail": "Please wait a minute before requesting another code."}, status=429)
-        sent = send_code(request.user, EmailOTP.Purpose.CHANGE_EMAIL, to_email=req.new_email)
+        sent = send_code(request.user, EmailOTP.Purpose.CHANGE_EMAIL, to_email=req.new_email)  # 429 when rate-limited
         return Response({"detail": f"We sent a code to {req.new_email}.", "email_sent": sent})
 
 
@@ -145,8 +144,7 @@ class ConfirmChangeView(APIView):
             return Response({"detail": "There's no approved email change to confirm."}, status=400)
         data = ConfirmInput(data=request.data, context={"user": request.user})
         data.is_valid(raise_exception=True)
-        otp = EmailOTP.latest_active(request.user, EmailOTP.Purpose.CHANGE_EMAIL)
-        if not otp or not otp.check_and_consume(data.validated_data["code"]):
+        if not check_code(request.user, EmailOTP.Purpose.CHANGE_EMAIL, data.validated_data["code"]):
             return Response({"code": ["Invalid or expired code."]}, status=400)
         if User.objects.filter(email__iexact=req.new_email).exclude(pk=request.user.pk).exists():
             return Response({"detail": "Another account started using this email. Please request a different one."}, status=409)

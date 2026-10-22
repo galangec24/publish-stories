@@ -166,6 +166,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "auth": "20/min",
         "otp": "10/hour",
+        "otp_send": "10/hour",  # per IP, any request that emails a code
         "views": "300/hour",
         "translate": "600/hour",
         "chat": "60/min",
@@ -195,7 +196,12 @@ BREVO_VERIFY_TEMPLATE_ID = os.environ.get("BREVO_VERIFY_TEMPLATE_ID", "")
 BREVO_RESET_TEMPLATE_ID = os.environ.get("BREVO_RESET_TEMPLATE_ID", "")
 OTP_TTL_MINUTES = int(os.environ.get("OTP_TTL_MINUTES", "10"))
 OTP_MAX_ATTEMPTS = int(os.environ.get("OTP_MAX_ATTEMPTS", "5"))
-OTP_RESEND_COOLDOWN_SECONDS = 60
+OTP_RESEND_COOLDOWN_SECONDS = int(os.environ.get("OTP_RESEND_COOLDOWN_SECONDS", "60"))
+# Anti-spam limits for emailed codes (see accounts/otp_guard.py).
+OTP_MAX_PER_HOUR = int(os.environ.get("OTP_MAX_PER_HOUR", "4"))  # per account and purpose
+OTP_MAX_PER_DAY = int(os.environ.get("OTP_MAX_PER_DAY", "10"))  # per account
+OTP_GLOBAL_DAILY_LIMIT = int(os.environ.get("OTP_GLOBAL_DAILY_LIMIT", "280"))  # Brevo free plan: 300/day
+OTP_MAX_FAILED_PER_HOUR = int(os.environ.get("OTP_MAX_FAILED_PER_HOUR", "10"))
 
 # PayMongo
 # Live translator (web app). Without a Google key the free MyMemory service is used.

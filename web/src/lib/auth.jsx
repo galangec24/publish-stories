@@ -5,9 +5,10 @@ import { api, ApiError, clearTokens, hasSession, refreshToken, saveTokens, setSe
 const AuthContext = createContext(null)
 
 export class EmailNotVerified extends Error {
-  constructor(email) {
+  constructor(email, retryAfter) {
     super('Verify your email first.')
     this.email = email
+    this.retryAfter = retryAfter
   }
 }
 
@@ -57,7 +58,7 @@ export function AuthProvider({ children }) {
         try {
           return accept(await api.post('auth/login/', { email, password }))
         } catch (e) {
-          if (e instanceof ApiError && e.code === 'email_not_verified') throw new EmailNotVerified(email)
+          if (e instanceof ApiError && e.code === 'email_not_verified') throw new EmailNotVerified(email, e.body?.retry_after)
           throw e
         }
       },

@@ -41,7 +41,7 @@ export function Modal({ open, onClose, title, subtitle, icon: Icon, children, fo
       >
         <header className="flex items-start gap-3 border-b border-line/70 px-6 pt-5 pb-4">
           {Icon && (
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand to-accent text-white shadow-lg shadow-brand/30">
+            <span className="tile-3d grid h-11 w-11 shrink-0 place-items-center rounded-2xl">
               <Icon className="h-5 w-5" />
             </span>
           )}

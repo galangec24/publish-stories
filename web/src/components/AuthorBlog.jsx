@@ -95,7 +95,9 @@ export function AuthorBlog({ stats }) {
             }`}
           >
             {s.big && <div className="pointer-events-none absolute -top-10 left-1/2 h-24 w-40 -translate-x-1/2 rounded-full bg-accent/25 blur-2xl" />}
-            <s.icon className={`relative mx-auto h-7 w-7 ${s.big ? 'text-accent' : 'text-brand'}`} aria-hidden />
+            <span className="tile-3d relative mx-auto grid h-14 w-14 place-items-center rounded-2xl">
+              <s.icon className="h-7 w-7" aria-hidden />
+            </span>
             <p className={`relative mt-2 font-display ${s.big ? 'text-5xl text-accent' : 'text-4xl'}`}>
               <CountUp value={s.value || 0} />
             </p>
@@ -106,8 +108,8 @@ export function AuthorBlog({ stats }) {
 
       <div className="mx-auto mt-6 grid max-w-4xl gap-4 sm:grid-cols-3">
         {WRITING.map((w) => (
-          <article key={w.title} className="rounded-2xl border border-line bg-surface/60 p-5">
-            <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand/15 text-brand">
+          <article key={w.title} className="group rounded-2xl border border-line bg-surface/60 p-5 transition hover:-translate-y-1">
+            <span className="tile-3d grid h-12 w-12 place-items-center rounded-xl">
               <w.icon className="h-5 w-5" aria-hidden />
             </span>
             <h3 className="mt-2 font-semibold">{w.title}</h3>

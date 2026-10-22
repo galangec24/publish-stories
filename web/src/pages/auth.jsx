@@ -130,7 +130,7 @@ function SignInForm({ onSwitch }) {
     } catch (err) {
       if (err instanceof EmailNotVerified) {
         toast('Verify your email first. We sent you a new code.')
-        navigate('/verify', { state: { email: err.email, from: location.state?.from } })
+        navigate('/verify', { state: { email: err.email, from: location.state?.from, retryAfter: err.retryAfter } })
       } else toast(err, 'error')
     } finally {
       setBusy(false)
@@ -202,8 +202,8 @@ function RegisterForm({ onSwitch }) {
       const email = form.email.trim()
       const first_name = form.first_name.trim()
       const last_name = form.last_name.trim()
-      await register(email, form.password, `${first_name} ${last_name}`.trim(), { first_name, last_name })
-      navigate('/verify', { state: { email } })
+      const res = await register(email, form.password, `${first_name} ${last_name}`.trim(), { first_name, last_name })
+      navigate('/verify', { state: { email, retryAfter: res?.retry_after } })
     } catch (err) {
       toast(err, 'error')
     } finally {
@@ -400,6 +400,19 @@ export const Register = () => <AuthPage initial="register" />
 
 // ---------------------------------------------------- Verify & reset -------
 
+/** Seconds until another code may be requested; set from the server's retry_after. */
+function useCooldown(initial = 0) {
+  const [left, setLeft] = useState(initial)
+  useEffect(() => {
+    if (left <= 0) return
+    const t = setTimeout(() => setLeft((s) => s - 1), 1000)
+    return () => clearTimeout(t)
+  }, [left])
+  return [left, setLeft]
+}
+
+const fmt = (s) => (s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`)
+
 function AuthCard({ title, subtitle, children, back, icon: Icon }) {
   return (
     <div className="mx-auto max-w-md animate-float-up pt-12">
@@ -410,7 +423,7 @@ function AuthCard({ title, subtitle, children, back, icon: Icon }) {
       )}
       <div className="card p-7 sm:p-8">
         {Icon && (
-          <span className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-brand to-accent text-white shadow-lg shadow-brand/30">
+          <span className="tile-3d mb-4 grid h-12 w-12 place-items-center rounded-2xl">
             <Icon className="h-6 w-6" />
           </span>
         )}
@@ -452,13 +465,7 @@ export function VerifyEmail() {
   const email = state?.email
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
-  const [cooldown, setCooldown] = useState(60)
-
-  useEffect(() => {
-    if (cooldown <= 0) return
-    const t = setTimeout(() => setCooldown((c) => c - 1), 1000)
-    return () => clearTimeout(t)
-  }, [cooldown])
+  const [cooldown, setCooldown] = useCooldown(state?.retryAfter ?? 60)
 
   if (!email) return <AuthCard back={{ to: '/login', label: 'Back to sign in' }} title="Verify your email" subtitle="Sign in again to get a new code." />
 
@@ -471,6 +478,7 @@ export function VerifyEmail() {
     } catch (err) {
       toast(err, 'error')
       setCode('')
+      if (err.body?.retry_after) setCooldown(err.body.retry_after)
     } finally {
       setBusy(false)
     }
@@ -486,12 +494,17 @@ export function VerifyEmail() {
         className="mt-4 w-full text-sm text-brand disabled:text-muted"
         disabled={cooldown > 0}
         onClick={async () => {
-          await resendCode(email).catch((e) => toast(e, 'error'))
-          toast('A new code is on its way.')
-          setCooldown(60)
+          try {
+            const res = await resendCode(email)
+            toast(res.detail || 'A new code is on its way.')
+            setCooldown(res.retry_after ?? 60)
+          } catch (e) {
+            toast(e, 'error')
+            if (e.body?.retry_after) setCooldown(e.body.retry_after)
+          }
         }}
       >
-        {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend code'}
+        {cooldown > 0 ? `Resend code in ${fmt(cooldown)}` : 'Resend code'}
       </button>
       <p className="mt-2 text-center text-xs text-muted">Can&apos;t find it? Check your spam folder.</p>
     </AuthCard>
@@ -508,13 +521,17 @@ export function ResetPassword() {
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
+  const [emailError, setEmailError] = useState('')
+  const [cooldown, setCooldown] = useCooldown(0)
 
   async function run(fn) {
     setBusy(true)
     try {
       await fn()
     } catch (err) {
-      toast(err, 'error')
+      if (err.status === 404) setEmailError(err.message)
+      else toast(err, 'error')
+      if (err.body?.retry_after) setCooldown(err.body.retry_after)
     } finally {
       setBusy(false)
     }
@@ -527,15 +544,35 @@ export function ResetPassword() {
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault()
+            setEmailError('')
             run(async () => {
-              await requestReset(email.trim())
+              const res = await requestReset(email.trim())
               setSent(true)
+              setCooldown(res.retry_after ?? 60)
+              toast(res.detail || 'Code sent.')
             })
           }}
         >
-          <IconInput icon={Mail} label="Email" type="email" required placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <button className="btn-primary h-12 w-full" disabled={busy}>
-            Send reset code
+          <IconInput
+            icon={Mail}
+            label="Email"
+            type="email"
+            required
+            placeholder="you@example.com"
+            value={email}
+            error={emailError}
+            onChange={(e) => {
+              setEmail(e.target.value)
+              setEmailError('')
+            }}
+          />
+          {emailError && (
+            <p className="-mt-2 text-xs text-muted">
+              New here? <Link to="/register" className="font-semibold text-brand hover:underline">Create an account</Link>
+            </p>
+          )}
+          <button className="btn-primary h-12 w-full" disabled={busy || cooldown > 0}>
+            {cooldown > 0 ? `Try again in ${fmt(cooldown)}` : busy ? 'Checking…' : 'Send reset code'}
           </button>
         </form>
       ) : (
@@ -554,8 +591,22 @@ export function ResetPassword() {
           <button className="btn-primary h-12 w-full" disabled={busy || code.length !== 6}>
             Set new password
           </button>
-          <button type="button" className="w-full text-sm text-brand" disabled={busy} onClick={() => run(() => resendCode(email.trim(), 'reset_password'))}>
-            Send another code
+          <button
+            type="button"
+            className="w-full text-sm text-brand disabled:text-muted"
+            disabled={busy || cooldown > 0}
+            onClick={() =>
+              run(async () => {
+                const res = await resendCode(email.trim(), 'reset_password')
+                toast(res.detail || 'New code sent.')
+                setCooldown(res.retry_after ?? 60)
+              })
+            }
+          >
+            {cooldown > 0 ? `Send another code in ${fmt(cooldown)}` : 'Send another code'}
+          </button>
+          <button type="button" className="w-full text-xs text-muted hover:text-ink" onClick={() => { setSent(false); setCode('') }}>
+            Use a different email
           </button>
         </form>
       )}

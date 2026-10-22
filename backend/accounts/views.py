@@ -1,5 +1,6 @@
 import logging
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import generics, permissions, status
@@ -16,12 +17,13 @@ from . import serializers as s
 from .brevo import EmailSendError, send_otp_email
 from .google_auth import GoogleAuthError, exchange_desktop_code, verify_id_token
 from .models import EmailOTP, UserTheme
+from .otp_guard import OTPLimited, OTPSendThrottle, check_code, ensure_can_send
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
-GENERIC_CODE_SENT = "If an account exists for that email, we've sent it a 6-digit code."
 INVALID_CODE = {"code": ["Invalid or expired code."]}
+NO_ACCOUNT = {"email": ["No account uses this email. Check for typos, or create an account."]}
 
 
 def issue_tokens(user, **extra):
@@ -30,7 +32,11 @@ def issue_tokens(user, **extra):
 
 
 def send_code(user, purpose, to_email=None):
-    """Issue an OTP and email it through Brevo. Returns whether the email went out."""
+    """Issue an OTP and email it through Brevo. Returns whether the email went out.
+
+    Raises OTPLimited (HTTP 429) when the anti-spam limits say no.
+    """
+    ensure_can_send(user, purpose)
     _, code = EmailOTP.issue(user, purpose)
     try:
         send_otp_email(user, purpose, code, to_email=to_email)
@@ -59,6 +65,8 @@ class PublicAuthView(APIView):
 class RegisterView(PublicAuthView):
     """Create an email/password account and mail a verification code via Brevo."""
 
+    throttle_classes = [ScopedRateThrottle, OTPSendThrottle]
+
     def post(self, request):
         data = s.RegisterSerializer(data=request.data)
         data.is_valid(raise_exception=True)
@@ -82,7 +90,12 @@ class RegisterView(PublicAuthView):
 
         sent = send_code(user, EmailOTP.Purpose.VERIFY_EMAIL)
         return Response(
-            {"detail": "We sent a 6-digit code to your email.", "email": user.email, "email_sent": sent},
+            {
+                "detail": "We sent a 6-digit code to your email.",
+                "email": user.email,
+                "email_sent": sent,
+                "retry_after": settings.OTP_RESEND_COOLDOWN_SECONDS,
+            },
             status=status.HTTP_201_CREATED,
         )
 
@@ -94,8 +107,7 @@ class VerifyEmailView(PublicAuthView):
         user = find_user(data.validated_data["email"])
         if not user:
             return Response(INVALID_CODE, status=400)
-        otp = EmailOTP.latest_active(user, EmailOTP.Purpose.VERIFY_EMAIL)
-        if not otp or not otp.check_and_consume(data.validated_data["code"]):
+        if not check_code(user, EmailOTP.Purpose.VERIFY_EMAIL, data.validated_data["code"]):
             return Response(INVALID_CODE, status=400)
         user.email_verified = True
         user.save(update_fields=["email_verified"])
@@ -104,16 +116,23 @@ class VerifyEmailView(PublicAuthView):
 
 class ResendCodeView(PublicAuthView):
     throttle_scope = "otp"
+    throttle_classes = [ScopedRateThrottle, OTPSendThrottle]
 
     def post(self, request):
         data = s.ResendCodeSerializer(data=request.data)
         data.is_valid(raise_exception=True)
         purpose = data.validated_data["purpose"]
+        if purpose == EmailOTP.Purpose.CHANGE_EMAIL:
+            return Response({"purpose": ["Use the email change screen in your profile."]}, status=400)
         user = find_user(data.validated_data["email"])
-        wanted = user and user.is_active and (purpose == EmailOTP.Purpose.RESET_PASSWORD or not user.email_verified)
-        if wanted and not EmailOTP.in_cooldown(user, purpose):
-            send_code(user, purpose)
-        return Response({"detail": GENERIC_CODE_SENT})
+        if not user or not user.is_active:
+            return Response(NO_ACCOUNT, status=404)
+        if purpose == EmailOTP.Purpose.VERIFY_EMAIL and user.email_verified:
+            return Response({"detail": "This email is already verified. You can sign in."}, status=400)
+        sent = send_code(user, purpose)
+        return Response(
+            {"detail": f"We sent a new code to {user.email}.", "email_sent": sent, "retry_after": settings.OTP_RESEND_COOLDOWN_SECONDS}
+        )
 
 
 class LoginView(PublicAuthView):
@@ -124,10 +143,13 @@ class LoginView(PublicAuthView):
         if not user or not user.is_active or not user.check_password(data.validated_data["password"]):
             return Response({"detail": "Incorrect email or password."}, status=status.HTTP_401_UNAUTHORIZED)
         if not user.email_verified:
-            if not EmailOTP.in_cooldown(user, EmailOTP.Purpose.VERIFY_EMAIL):
+            try:
                 send_code(user, EmailOTP.Purpose.VERIFY_EMAIL)
+                detail, wait = "Verify your email first. We sent you a new code.", settings.OTP_RESEND_COOLDOWN_SECONDS
+            except OTPLimited as limited:
+                detail, wait = "Verify your email first. Use the code we already sent you.", limited.wait
             return Response(
-                {"code": "email_not_verified", "detail": "Verify your email first. We sent you a new code."},
+                {"code": "email_not_verified", "detail": detail, "retry_after": wait},
                 status=status.HTTP_403_FORBIDDEN,
             )
         return Response(issue_tokens(user))
@@ -184,15 +206,21 @@ class GoogleLoginView(PublicAuthView):
 
 
 class PasswordResetRequestView(PublicAuthView):
+    """Email a reset code. Unknown emails stop here (404) so no code is issued for them."""
+
     throttle_scope = "otp"
+    throttle_classes = [ScopedRateThrottle, OTPSendThrottle]
 
     def post(self, request):
         data = s.EmailSerializer(data=request.data)
         data.is_valid(raise_exception=True)
         user = find_user(data.validated_data["email"])
-        if user and user.is_active and not EmailOTP.in_cooldown(user, EmailOTP.Purpose.RESET_PASSWORD):
-            send_code(user, EmailOTP.Purpose.RESET_PASSWORD)
-        return Response({"detail": GENERIC_CODE_SENT})
+        if not user or not user.is_active:
+            return Response(NO_ACCOUNT, status=404)
+        sent = send_code(user, EmailOTP.Purpose.RESET_PASSWORD)
+        return Response(
+            {"detail": f"We sent a 6-digit code to {user.email}.", "email_sent": sent, "retry_after": settings.OTP_RESEND_COOLDOWN_SECONDS}
+        )
 
 
 class PasswordResetConfirmView(PublicAuthView):
@@ -202,8 +230,7 @@ class PasswordResetConfirmView(PublicAuthView):
         user = find_user(data.validated_data["email"])
         if not user or not user.is_active:
             return Response(INVALID_CODE, status=400)
-        otp = EmailOTP.latest_active(user, EmailOTP.Purpose.RESET_PASSWORD)
-        if not otp or not otp.check_and_consume(data.validated_data["code"]):
+        if not check_code(user, EmailOTP.Purpose.RESET_PASSWORD, data.validated_data["code"]):
             return Response(INVALID_CODE, status=400)
         user.set_password(data.validated_data["new_password"])
         user.email_verified = True

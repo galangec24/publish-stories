@@ -76,9 +76,11 @@ export function AboutMe() {
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               {ROLES.map((r) => (
-                <div key={r.title} className="rounded-2xl border border-line bg-surface-2/50 p-4 transition hover:-translate-y-0.5 hover:border-brand/50">
-                  <p className="flex items-center gap-2 font-semibold">
-                    <r.icon className="h-5 w-5 text-brand" aria-hidden />
+                <div key={r.title} className="group rounded-2xl border border-line bg-surface-2/50 p-4 transition hover:-translate-y-0.5 hover:border-brand/50">
+                  <p className="flex items-center gap-3 font-semibold">
+                    <span className="tile-3d grid h-10 w-10 shrink-0 place-items-center rounded-xl">
+                      <r.icon className="h-5 w-5" aria-hidden />
+                    </span>
                     {r.title}
                   </p>
                   <p className="mt-1.5 text-sm text-muted">{r.text}</p>

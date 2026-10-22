@@ -134,7 +134,7 @@ export function NotificationBell() {
                     onClick={() => openItem(n)}
                     className="flex w-full items-start gap-3 rounded-xl px-2 py-2.5 text-left transition hover:bg-surface-2"
                   >
-                    <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-white ${color}`}>
+                    <span className={`bevel-3d grid h-11 w-11 shrink-0 place-items-center rounded-full text-white ${color}`}>
                       <Icon className="h-5 w-5" />
                     </span>
                     <span className="min-w-0 flex-1">
@@ -174,8 +174,8 @@ export function ProfileMenu() {
     navigate(to)
   }
 
-  const row = 'flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left text-sm font-medium transition hover:bg-surface-2'
-  const icon = 'grid h-9 w-9 place-items-center rounded-full bg-surface-2'
+  const row = 'group flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left text-sm font-medium transition hover:bg-surface-2'
+  const icon = 'tile-3d grid h-9 w-9 place-items-center rounded-full'
 
   return (
     <div ref={ref} className="relative">

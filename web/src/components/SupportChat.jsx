@@ -67,7 +67,7 @@ export function SupportChat() {
     <>
       <button
         onClick={() => setOpen(!open)}
-        className="fixed right-4 bottom-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-brand to-accent text-white shadow-xl shadow-brand/40 transition hover:scale-105 sm:right-6 sm:bottom-6"
+        className="tile-3d fixed right-4 bottom-4 z-40 grid h-14 w-14 place-items-center rounded-full sm:right-6 sm:bottom-6"
         aria-label={open ? 'Close support chat' : 'Chat with support'}
       >
         {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
