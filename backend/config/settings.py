@@ -99,8 +99,10 @@ TEMPLATES = [
 DATABASES = {
     "default": dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600,
-        # Supabase's pooler may close idle connections; check before reuse.
+        # Under ASGI every request runs in its own thread, so persistent
+        # connections pile up and exhaust Supabase's session pooler (~15
+        # clients on the free plan). Close each connection after its request.
+        conn_max_age=int(os.environ.get("DB_CONN_MAX_AGE", "0")),
         conn_health_checks=True,
     )
 }

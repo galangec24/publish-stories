@@ -21,10 +21,10 @@ def user_group(user_id):
 
 
 def _send(group, event, data):
-    layer = get_channel_layer()
-    if layer is None:
-        return
     try:
+        layer = get_channel_layer()
+        if layer is None:
+            return
         async_to_sync(layer.group_send)(group, {"type": "push", "event": event, "data": data})
     except Exception:  # pragma: no cover - depends on the live channel layer
         logger.warning("Realtime push to %s failed", group, exc_info=True)
