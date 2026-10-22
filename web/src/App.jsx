@@ -7,6 +7,7 @@ import { useAuth } from './lib/auth'
 import { setTheme } from './lib/theme'
 import { Home } from './pages/Home'
 import { Login, Register, ResetPassword, VerifyEmail } from './pages/auth'
+import { Privacy, Terms } from './pages/Legal'
 import { Onboarding } from './pages/Onboarding'
 import { Profile } from './pages/Profile'
 import { Settings } from './pages/Settings'
@@ -43,6 +44,8 @@ export default function App() {
         <Route path="welcome" element={user ? <Onboarding /> : <Navigate to="/login" replace />} />
         <Route path="settings" element={<Settings />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="privacy" element={<Privacy />} />
+        <Route path="terms" element={<Terms />} />
         <Route
           path="admin/*"
           element={
