@@ -96,3 +96,17 @@ class GenreColumnTitleFontTests(APITestCase):
         self.assertEqual(story.data["title_font"], "playfair")
         self.assertEqual(story.data["column"]["url"], "https://www.sunstar.com.ph/author/x")
         self.assertEqual(Column.objects.get().url, "https://www.sunstar.com.ph/author/x")
+
+
+class SeedGenresTests(APITestCase):
+    def test_deleted_genres_do_not_come_back(self):
+        import io
+
+        from django.core.management import call_command
+
+        call_command("seed_genres", stdout=io.StringIO())
+        self.assertEqual(Genre.objects.count(), 13)
+        Genre.objects.filter(name="Horror").delete()
+        call_command("seed_genres", stdout=io.StringIO())  # e.g. the next server restart
+        self.assertEqual(Genre.objects.count(), 12)
+        self.assertFalse(Genre.objects.filter(name="Horror").exists())

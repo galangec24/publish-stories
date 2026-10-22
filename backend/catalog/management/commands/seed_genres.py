@@ -20,9 +20,16 @@ DEFAULT_GENRES = [
 
 
 class Command(BaseCommand):
-    help = "Create the default genre list (existing genres are left untouched)."
+    help = "Create the starter genres on a brand-new site (skipped once any genre exists)."
+
+    def add_arguments(self, parser):
+        parser.add_argument("--force", action="store_true", help="Add any missing starter genres even if genres exist")
 
     def handle(self, *args, **options):
+        # Runs on every server start; genres an admin deleted must not come back.
+        if Genre.objects.exists() and not options["force"]:
+            self.stdout.write("Genres already set up; skipping starter genres.")
+            return
         created = 0
         for order, (name, color) in enumerate(DEFAULT_GENRES):
             _, was_created = Genre.objects.get_or_create(name=name, defaults={"color": color, "sort_order": order})
