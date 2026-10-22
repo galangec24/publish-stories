@@ -162,6 +162,31 @@ The design uses a deep night-sky palette with warm "reading lamp" amber accents,
 - **3D book covers:** every story card is a CSS-3D book with a spine, page edges and a gloss highlight, and it tilts toward the cursor. Rows of books sit on "shelves".
 - **Reader:** a paper page with a soft drop shadow and book typography.
 
+### 4.3 About Me
+
+The home page ends with an **About Me** section for Maria Gemima Valderrama: her photo on a tilting 3D frame, her background (DepEd Davao Region, SunStar Davao, Ateneo de Davao University, DepEd Davao Dispatch), and links to SunStar and DepEd. The header has an **About** link that scrolls to it.
+
+- The text lives in `web/src/components/AboutMe.jsx`.
+- The photo is in `web/public/about/`.
+- The originals (`about-me.txt`, `mom.jpg` in the project root) are kept out of git.
+
+### 4.4 Live Translator
+
+A 🌐 language picker in the header translates **every word on screen**: menus, buttons, toasts, the About section and story text.
+
+**Languages:** English, Filipino, Cebuano (Bisaya), Ilocano, Spanish, Chinese, Japanese, Korean and Arabic. The list comes from the server (`GET /api/translate/languages/`), so new languages need no app update.
+
+**How it works:**
+
+- **On the page:** `web/src/i18n/liveTranslator.js` walks the page's text nodes (plus `placeholder`, `title`, `aria-label` and `alt`) and sends unseen strings in batches to `POST /api/translate/`, then swaps the words in place.
+- **Keeping up:** a MutationObserver re-runs it whenever React renders something new, so navigation, new chapters and messages are translated as they appear.
+- **Switching back:** choosing English restores the original text exactly.
+- **On the server:** every translation is cached in the database per string, language and provider, so each sentence is only paid for once. Browsers also keep a local copy.
+- **Providers:**
+  - With `GOOGLE_TRANSLATE_API_KEY` set, it uses Google Cloud Translation (best quality; the first 500k characters a month are free).
+  - Otherwise it uses the free MyMemory service, which is lower quality and has a small daily quota. Adding a Google key later automatically replaces the MyMemory results as pages are visited.
+- **Not translated:** anything marked `translate="no"` or `.notranslate` (the brand name, her name, the watermark) and the Story Studio editor. Words people type into forms are left alone, but placeholders are translated.
+
 ## 5. Content Protection (Screenshots & Screen Recording)
 
 Protected screens are the reader and the Studio page. They are wrapped in a `ProtectedContent` component (a widget in Flutter, a React component on the web) that turns on the strongest protection each platform allows, hides content when capture is likely, disables text selection and copying, and tiles a faint **watermark with the reader's email** so any leak is traceable.
@@ -367,6 +392,8 @@ STORY-APP/
 | `GET /api/stories/<slug>/` | public | Story + chapters (paywalled), with `view_count` and `reader_count` |
 | `POST /api/stories/<slug>/view/` | public | Record a view (once per reader per day) → `{view_count, reader_count}` |
 | `GET /api/stats/` | public | `{total_readers, total_views, published_stories}` |
+| `GET /api/translate/languages/` | public | Languages offered by the live translator |
+| `POST /api/translate/` | public | `{target, texts: [...]}` → `{translations: [...]}` (cached; throttled) |
 | `POST /api/subscribe/<story_id>/` | user | Create QR Ph checkout |
 | `GET /api/subscriptions/` · `/api/subscriptions/<id>/` | user | My purchases; poll status |
 | `POST /api/webhook/paymongo/` | PayMongo | Signed webhook |
@@ -406,6 +433,16 @@ flutter run -d windows --dart-define=GOOGLE_DESKTOP_CLIENT_ID=...
 ```
 
 **Google Cloud Console setup.** Create four OAuth clients: *Web*, *Android* (package name plus SHA-1), *iOS* (bundle ID), and *Desktop app*. Put all four IDs in `GOOGLE_CLIENT_IDS`, and the desktop ID and secret in `GOOGLE_DESKTOP_*`.
+
+**Where to get each key:**
+
+| Key | Where |
+|---|---|
+| `GOOGLE_CLIENT_IDS`, `VITE_GOOGLE_CLIENT_ID` | https://console.cloud.google.com/apis/credentials → OAuth client ID → Web application (consent screen: https://console.cloud.google.com/auth/overview) |
+| `GOOGLE_TRANSLATE_API_KEY` | Enable https://console.cloud.google.com/apis/library/translate.googleapis.com, then create an API key at https://console.cloud.google.com/apis/credentials. Billing must be on. |
+| `BREVO_API_KEY` / `BREVO_SENDER_EMAIL` | https://app.brevo.com/settings/keys/api · https://app.brevo.com/senders |
+| `PAYMONGO_SECRET_KEY` / `PAYMONGO_WEBHOOK_SECRET` | https://dashboard.paymongo.com/developers (API keys and Webhooks) |
+| Where to paste them | https://dashboard.render.com → story-api → Environment |
 
 **Brevo setup.** Verify the sender domain (SPF/DKIM) so codes don't land in spam, create an API key, and set `BREVO_API_KEY` and `BREVO_SENDER_EMAIL`.
 
