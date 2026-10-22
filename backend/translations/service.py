@@ -85,21 +85,25 @@ def translate_texts(texts, target):
     if target == "en":
         return list(texts)
     hashes = [text_hash(t) for t in texts]
+    provider = provider_name()
+    # Only reuse results from the current provider, so adding a Google key
+    # replaces earlier MyMemory translations as pages are visited.
     cached = dict(
-        Translation.objects.filter(target=target, source_hash__in=set(hashes)).values_list(
+        Translation.objects.filter(target=target, provider=provider, source_hash__in=set(hashes)).values_list(
             "source_hash", "translated_text"
         )
     )
     missing = list(dict.fromkeys(t for t, h in zip(texts, hashes) if h not in cached))
     if missing:
-        provider = provider_name()
         fresh = _google(missing, target) if provider == "google" else _mymemory(missing, target)
         for source, translated in zip(missing, fresh):
             h = text_hash(source)
             cached[h] = translated
             try:
-                Translation.objects.create(
-                    source_hash=h, target=target, source_text=source, translated_text=translated, provider=provider
+                Translation.objects.update_or_create(
+                    source_hash=h,
+                    target=target,
+                    defaults={"source_text": source, "translated_text": translated, "provider": provider},
                 )
             except IntegrityError:
                 pass  # another request cached it first

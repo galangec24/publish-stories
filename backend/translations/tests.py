@@ -44,6 +44,18 @@ class TranslateTests(APITestCase):
             response = self.client.post("/api/translate/", {"target": "fil", "texts": ["Hi"]}, format="json")
         self.assertEqual(response.status_code, 503)
 
+    def test_google_key_replaces_cached_fallback_translations(self):
+        with override_settings(GOOGLE_TRANSLATE_API_KEY=""), mock.patch(
+            "translations.service._mymemory_one", return_value="lahat tungkol sa akin"
+        ):
+            self.client.post("/api/translate/", {"target": "fil", "texts": ["About Me"]}, format="json")
+        with override_settings(GOOGLE_TRANSLATE_API_KEY="key"), mock.patch(
+            "translations.service._google", return_value=["Tungkol sa Akin"]
+        ):
+            response = self.client.post("/api/translate/", {"target": "fil", "texts": ["About Me"]}, format="json")
+        self.assertEqual(response.data["translations"], ["Tungkol sa Akin"])
+        self.assertEqual(Translation.objects.get().provider, "google")
+
     def test_language_list(self):
         codes = [l["code"] for l in self.client.get("/api/translate/languages/").data["languages"]]
         self.assertIn("fil", codes)
