@@ -10,8 +10,8 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
-      injectRegister: false, // registered in src/main.jsx so updates reload the page
+      registerType: 'prompt', // waits for a page change to switch versions (src/pwa/updates.js)
+      injectRegister: false,
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
         id: '/',

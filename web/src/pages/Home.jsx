@@ -235,11 +235,17 @@ function ColumnsTab({ columns, loading }) {
               </a>
             )}
           </div>
-          <div className="-mx-2 mt-4 flex gap-6 overflow-x-auto px-4 pt-4 pb-6 [scrollbar-width:thin]">
-            {c.stories.map((s) => (
-              <Book3D key={s.id} story={s} />
-            ))}
-          </div>
+          {c.stories.length ? (
+            <div className="-mx-2 mt-4 flex gap-6 overflow-x-auto px-4 pt-4 pb-6 [scrollbar-width:thin]">
+              {c.stories.map((s) => (
+                <Book3D key={s.id} story={s} />
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 rounded-xl border border-dashed border-line p-4 text-sm text-muted">
+              No pieces published here yet.{c.url ? ' Read the column on its site in the meantime.' : ' Check back soon.'}
+            </p>
+          )}
         </section>
       ))}
     </div>

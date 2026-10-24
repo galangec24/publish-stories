@@ -12,9 +12,27 @@ export class EmailNotVerified extends Error {
   }
 }
 
+function cachedMe() {
+  try {
+    return hasSession() ? JSON.parse(localStorage.getItem('me') || 'null') : null
+  } catch {
+    return null
+  }
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [ready, setReady] = useState(false)
+  // Start from the profile saved on this device, so a sleeping server doesn't hold the whole site on a spinner.
+  const [user, setUser] = useState(cachedMe)
+  const [ready, setReady] = useState(() => !hasSession() || Boolean(cachedMe()))
+
+  useEffect(() => {
+    try {
+      if (user) localStorage.setItem('me', JSON.stringify(user))
+      else localStorage.removeItem('me')
+    } catch {
+      /* private mode: no cache */
+    }
+  }, [user])
 
   const refreshMe = useCallback(async () => {
     const me = await api.get('user/me/')
@@ -30,7 +48,11 @@ export function AuthProvider({ children }) {
     }
     refreshMe()
       .catch((e) => {
-        if (e instanceof ApiError) clearTokens()
+        // Only a rejected session signs you out; a slow or waking server keeps the saved profile.
+        if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+          clearTokens()
+          setUser(null)
+        }
       })
       .finally(() => setReady(true))
   }, [refreshMe])

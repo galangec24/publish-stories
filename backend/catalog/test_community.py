@@ -116,14 +116,17 @@ class ColumnsTabTests(APITestCase):
     def test_columns_tab_and_column_filters(self):
         column = Column.objects.create(title="Sunday Reflections", url="https://example.com/col")
         Column.objects.create(title="Empty")
+        Column.objects.create(title="Announced", is_public=True, url="https://example.com/soon")
         piece = Story.objects.create(title="On Teachers", status="published", column=column)
         Story.objects.create(title="Draft piece", status="draft", column=column)
         novel = Story.objects.create(title="A Novel", status="published")
 
         tab = self.client.get("/api/columns/").data
-        self.assertEqual([c["title"] for c in tab], ["Sunday Reflections"])
-        self.assertEqual(tab[0]["story_count"], 1)
-        self.assertEqual([s["slug"] for s in tab[0]["stories"]], [piece.slug])
+        # Public columns show even before anything is published; private empty ones don't.
+        self.assertEqual([c["title"] for c in tab], ["Announced", "Sunday Reflections"])
+        self.assertEqual(tab[0]["stories"], [])
+        self.assertEqual(tab[1]["story_count"], 1)
+        self.assertEqual([s["slug"] for s in tab[1]["stories"]], [piece.slug])
 
         self.assertEqual([s["slug"] for s in self.client.get("/api/stories/?column=none").data["results"]], [novel.slug])
         admin = User.objects.create_user(email="admin@example.com", password="x", is_admin=True)
@@ -131,4 +134,4 @@ class ColumnsTabTests(APITestCase):
         listed = self.client.get("/api/admin/stories/?column=any").data["results"]
         self.assertEqual(sorted(s["title"] for s in listed), ["Draft piece", "On Teachers"])
         counts = {c["title"]: c["story_count"] for c in self.client.get("/api/admin/columns/").data}
-        self.assertEqual(counts, {"Empty": 0, "Sunday Reflections": 2})
+        self.assertEqual(counts, {"Announced": 0, "Empty": 0, "Sunday Reflections": 2})

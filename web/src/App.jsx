@@ -12,6 +12,7 @@ import { Onboarding } from './pages/Onboarding'
 import { Profile } from './pages/Profile'
 import { Settings } from './pages/Settings'
 import { StoryPage } from './pages/StoryPage'
+import { applyWaitingUpdate } from './pwa/updates'
 
 // The admin area pulls in Quill; load it only for admins.
 const Admin = lazy(() => import('./pages/admin/AdminRoutes'))
@@ -19,6 +20,11 @@ const Admin = lazy(() => import('./pages/admin/AdminRoutes'))
 export default function App() {
   const { user, ready, isAdmin } = useAuth()
   const location = useLocation()
+
+  // A new site version that's waiting takes over when the reader moves to another page.
+  useEffect(() => {
+    applyWaitingUpdate()
+  }, [location.pathname])
 
   // The account's theme follows the reader across devices.
   useEffect(() => {

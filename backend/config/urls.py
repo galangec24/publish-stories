@@ -10,6 +10,7 @@ urlpatterns = [
     path("api/admin/", include("catalog.admin_urls")),
     path("api/admin/", include("accounts.admin_urls")),
     path("api/admin/", include("payments.admin_urls")),
+    path("api/admin/", include("audit.urls")),
     path("api/", include("catalog.urls")),
     path("api/media/images/<uuid:pk>.webp", serve_image),
     path("api/", include("payments.urls")),

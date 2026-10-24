@@ -57,7 +57,7 @@ class GenreListView(generics.ListAPIView):
 
 
 class ColumnListView(APIView):
-    """GET /api/columns/ — the Columns tab: every column with published pieces, newest pieces first."""
+    """GET /api/columns/ — the Columns tab: public columns, and any column with published pieces (newest first)."""
 
     permission_classes = [permissions.AllowAny]
 
@@ -65,7 +65,7 @@ class ColumnListView(APIView):
         stories = published_stories().order_by("-published_at")
         columns = Column.objects.annotate(
             story_count=Count("stories", filter=Q(stories__status=Story.Status.PUBLISHED))
-        ).filter(story_count__gt=0).order_by("title")
+        ).filter(Q(story_count__gt=0) | Q(is_public=True)).order_by("title")
         return Response(
             [
                 {
@@ -177,7 +177,7 @@ class HomeView(APIView):
         return Response(
             {
                 "genres": GenreSerializer(genres, many=True).data,
-                "has_columns": Column.objects.filter(stories__status=Story.Status.PUBLISHED).exists(),
+                "has_columns": Column.objects.filter(Q(is_public=True) | Q(stories__status=Story.Status.PUBLISHED)).exists(),
                 "for_you": for_you,
                 "latest": shelf(stories),
                 "free": shelf(stories.filter(Q(price__lte=0) | Q(column__is_public=True))),

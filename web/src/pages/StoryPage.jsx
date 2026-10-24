@@ -12,14 +12,14 @@ import { useAuth } from '../lib/auth'
 import { DeltaView } from '../lib/delta'
 import { fontStack, titleStack } from '../lib/fonts'
 import { formatCount, READING_MODES, useReadingMode } from '../lib/readingMode'
-import { useAsync } from '../lib/useAsync'
+import { useCachedAsync } from '../lib/useAsync'
 
 export function StoryPage() {
   const { slug } = useParams()
   const [params, setParams] = useSearchParams()
   const { user } = useAuth()
   const toast = useToast()
-  const story = useAsync(() => api.get(`stories/${slug}/`), [slug, user?.id])
+  const story = useCachedAsync(`cache:story:${slug}:${user?.id || 'guest'}`, () => api.get(`stories/${slug}/`), [])
   const [mode, setMode] = useReadingMode()
   const [index, setIndex] = useState(0)
   const [fromEnd, setFromEnd] = useState(false)
@@ -76,7 +76,7 @@ export function StoryPage() {
   }, [])
 
   if (story.loading && !story.data) return <Spinner />
-  if (story.error) return <p className="py-16 text-center text-muted">{story.error.message}</p>
+  if (story.error && !story.data) return <p className="py-16 text-center text-muted">{story.error.message}</p>
   const s = story.data
   const chapter = s.chapters[Math.min(index, s.chapters.length - 1)]
   const showPaywall = chapter && (chapter.locked || chapter.content === null)
