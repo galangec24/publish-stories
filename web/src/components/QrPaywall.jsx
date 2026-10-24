@@ -98,15 +98,26 @@ export function QrPaywall({ story, signedIn, onUnlocked }) {
                 {method.name} · <span className="text-teal-700">{peso(story.price)}</span>
               </p>
             </div>
-            <p className="mt-2 text-xs text-muted">
-              {qr
-                ? `Your app shows ${peso(story.price)} when you scan. If it looks greyed out, type ${Number(story.price)}.`
-                : `Enter ${peso(story.price)} when you pay.`}
-              {(method.account_name || method.account_number) && (
-                <> Pays {[method.account_name, method.account_number].filter(Boolean).join(' · ')}.</>
-              )}
-            </p>
-            <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {(method.account_name || method.account_number) && (
+              <p className="mt-2 text-xs text-muted">Pays {[method.account_name, method.account_number].filter(Boolean).join(' · ')}</p>
+            )}
+            <ol className="mx-auto mt-4 max-w-sm space-y-2 text-left text-sm">
+              {[
+                <>Scan this QR with GCash or any bank app. Paying on this phone? Tap <b>Save QR</b>, then upload it in your app&apos;s QR scanner.</>,
+                <>
+                  Pay <b className="text-accent">{peso(story.price)}</b>.
+                  {qr ? ` Your app may show it greyed out; if so, type ${Number(story.price)}.` : ''}
+                </>,
+                <>Take a <b>screenshot</b> of the receipt (it shows the amount and reference number).</>,
+                <>Tap <b>I&apos;ve paid</b>, attach the screenshot and type the reference number. The story opens right away.</>,
+              ].map((text, i) => (
+                <li key={i} className="flex gap-2.5">
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand/15 text-[11px] font-bold text-brand">{i + 1}</span>
+                  <span className="text-muted">{text}</span>
+                </li>
+              ))}
+            </ol>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
               <button type="button" className="btn-primary" onClick={() => setDialog('paid')}>
                 <ReceiptText className="h-4 w-4" /> I&apos;ve paid
               </button>
@@ -114,8 +125,8 @@ export function QrPaywall({ story, signedIn, onUnlocked }) {
                 <Download className="h-4 w-4" /> Save QR
               </button>
             </div>
-            <p className="mx-auto mt-2 max-w-xs text-[11px] text-muted">
-              Paying on this phone? Save the QR, then open GCash or your bank app and upload it in the QR scanner.
+            <p className="mx-auto mt-2 max-w-sm text-[11px] text-muted">
+              The author checks every receipt. If the payment can&apos;t be found, access is removed.
             </p>
           </>
         ) : (
@@ -243,7 +254,15 @@ function PaidDialog({ open, method, story, signedIn, onClose, onUnlocked }) {
   const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState({})
   const [done, setDone] = useState(null)
+  const [preview, setPreview] = useState(null)
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+
+  useEffect(() => {
+    if (!proof) return setPreview(null)
+    const url = URL.createObjectURL(proof)
+    setPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [proof])
 
   async function submit(e) {
     e.preventDefault()
@@ -277,7 +296,7 @@ function PaidDialog({ open, method, story, signedIn, onClose, onUnlocked }) {
       open={open}
       onClose={close}
       title={done ? 'Unlocked! Enjoy the story' : 'Almost there'}
-      subtitle={done ? 'Thank you for supporting the author.' : `${peso(story.price)} via ${method.name}`}
+      subtitle={done ? 'Thank you for supporting the author.' : `${peso(story.price)} via ${method.name}: send your receipt`}
       icon={done ? CheckCircle2 : ReceiptText}
     >
       {done ? (
@@ -291,8 +310,24 @@ function PaidDialog({ open, method, story, signedIn, onClose, onUnlocked }) {
         </div>
       ) : (
         <form onSubmit={submit} className="space-y-4">
+          <label className="block cursor-pointer">
+            <span className="text-sm font-medium">1. Screenshot of your payment receipt</span>
+            <span className={`mt-1 flex items-center gap-3 rounded-xl border border-dashed p-3 text-sm hover:border-brand ${errors.proof ? 'border-rose-400' : 'border-line'}`}>
+              {preview ? (
+                <img src={preview} alt="Receipt" className="h-20 w-14 rounded-md object-cover" />
+              ) : (
+                <ImagePlus className="h-6 w-6 text-brand" />
+              )}
+              <span className="min-w-0 flex-1">
+                {proof ? <span className="block truncate">{proof.name}</span> : 'Choose the screenshot that shows the amount and reference number'}
+                {proof && <span className="block text-xs text-brand">Tap to change</span>}
+              </span>
+            </span>
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => setProof(e.target.files[0] || null)} />
+            {errors.proof && <span className="mt-1 block text-xs text-rose-400">{errors.proof[0]}</span>}
+          </label>
           <label className="block">
-            <span className="text-sm font-medium">Reference number from your receipt</span>
+            <span className="text-sm font-medium">2. Reference number from the receipt</span>
             <input className="input mt-1 font-mono" required value={form.reference} onChange={set('reference')} placeholder="e.g. 1012 345 678901" autoComplete="off" />
             {errors.reference && <span className="mt-1 block text-xs text-rose-400">{errors.reference[0]}</span>}
           </label>
@@ -307,21 +342,15 @@ function PaidDialog({ open, method, story, signedIn, onClose, onUnlocked }) {
               {errors.payer_email && <span className="mt-1 block text-xs text-rose-400">{errors.payer_email[0]}</span>}
             </label>
           </div>
-          <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-line p-3 text-sm hover:border-brand">
-            <ImagePlus className="h-5 w-5 text-brand" />
-            <span className="min-w-0 flex-1 truncate">{proof ? proof.name : 'Attach the receipt screenshot (optional)'}</span>
-            <input type="file" accept="image/*" className="hidden" onChange={(e) => setProof(e.target.files[0] || null)} />
-          </label>
-          {errors.proof && <span className="block text-xs text-rose-400">{errors.proof[0]}</span>}
           {errors.method && <span className="block text-xs text-rose-400">{errors.method[0]}</span>}
-          <button className="btn-primary w-full" disabled={busy || !form.reference.trim()}>
+          <button className="btn-primary w-full" disabled={busy || !form.reference.trim() || !proof}>
             {busy ? 'Unlocking…' : 'Unlock the story'}
           </button>
           <p className="flex items-start gap-2 text-xs text-muted">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
             {signedIn
-              ? 'It opens on your account right away. The author checks each payment later; if the money never arrived, access is removed.'
-              : 'It opens right away on this device and others on the same Wi-Fi. The author checks each payment later; if the money never arrived, access is removed.'}
+              ? 'It opens on your account right away. The author checks your receipt against the payments received; if it isn’t found, access is removed.'
+              : 'No account needed: it opens right away on this device and others on the same Wi-Fi. The author checks your receipt against the payments received; if it isn’t found, access is removed.'}
           </p>
         </form>
       )}

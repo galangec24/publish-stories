@@ -36,11 +36,11 @@ function Proof({ id }) {
     api.blobUrl(`admin/payments/manual/${id}/proof/`).then((u) => setSrc((url = u))).catch(() => {})
     return () => url && URL.revokeObjectURL(url)
   }, [id])
-  if (!src) return <div className="h-24 w-16 animate-pulse rounded-lg bg-surface-2" />
+  if (!src) return <div className="h-32 w-24 animate-pulse rounded-lg bg-surface-2" />
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} title="View receipt">
-        <img src={src} alt="Receipt" className="h-24 w-16 rounded-lg border border-line object-cover" />
+        <img src={src} alt="Receipt" className="h-32 w-24 rounded-lg border border-line object-cover" />
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title="Receipt screenshot" icon={ReceiptText}>
         <img src={src} alt="Receipt" className="mx-auto max-h-[70vh] rounded-xl" />
@@ -89,9 +89,16 @@ export function QrPayments() {
         </Link>
       </div>
       <p className="mt-1 text-sm text-muted">
-        Readers can read as soon as they send their reference number. Open your GCash or bank app, find the transfer by its
-        reference number, then press <b>Confirm received</b>. If it never arrived, press <b>Revoke</b> to lock the story again.
+        Readers send a receipt screenshot and the reference number, and the story opens for them right away. For each one below:
       </p>
+      <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted">
+        <li>Tap the receipt to see it full size.</li>
+        <li>In your GCash or BPI app, find the incoming transfer with the same reference number.</li>
+        <li>Check that the amount matches the story&apos;s price shown here.</li>
+        <li>
+          Press <b>Confirm received</b>. If you can&apos;t find it, or the amount is short, press <b>Revoke</b> to lock the story again.
+        </li>
+      </ol>
 
       <div className="mt-4 flex flex-wrap gap-2">
         {[
@@ -114,11 +121,11 @@ export function QrPayments() {
         <div className="mt-5 space-y-3">
           {rows.map((p) => (
             <div key={p.id} className="card flex flex-wrap items-start gap-4 p-4">
-              {p.has_proof ? <Proof id={p.id} /> : <div className="grid h-24 w-16 place-items-center rounded-lg border border-dashed border-line text-[10px] text-muted">No receipt</div>}
+              {p.has_proof ? <Proof id={p.id} /> : <div className="grid h-32 w-24 place-items-center rounded-lg border border-dashed border-line text-center text-[10px] text-muted">No receipt (older payment)</div>}
               <div className="min-w-0 flex-1 space-y-1 text-sm">
                 <p className="flex flex-wrap items-center gap-2">
                   <span className="font-display text-xl">{peso(p.amount)}</span>
-                  <span className="text-muted">via {p.method_name || 'QR'}</span>
+                  <span className="text-muted">story price · paid via {p.method_name || 'QR'}</span>
                   <StatusBadge p={p} />
                 </p>
                 <p>

@@ -40,6 +40,7 @@ class ManualPaymentTests(APITestCase):
         return self.client.get(self.url, HTTP_X_VIEWER_ID=dev, HTTP_X_FORWARDED_FOR=ip, **extra).data
 
     def pay(self, dev=device(1), ip=HOME, reference="1234567890123", **fields):
+        fields.setdefault("proof", png())
         return self.client.post(
             "/api/payments/manual/",
             {"story": self.story.id, "method": self.gcash.id, "reference": reference, **fields},
@@ -113,6 +114,12 @@ class ManualPaymentTests(APITestCase):
 
     def test_revoke_locks_again_and_kills_the_code(self):
         self.assertEqual(self.pay(reference="ab").status_code, 400)
+        no_receipt = self.client.post(
+            "/api/payments/manual/",
+            {"story": self.story.id, "method": self.gcash.id, "reference": "55555555"},
+            HTTP_X_VIEWER_ID=device(1),
+        )
+        self.assertIn("proof", no_receipt.data)
         purchase = self.pay().data["purchase"]
         self.assertIn("reference", self.pay(dev=device(9), ip=CAFE, reference="1234567890123").data)
         self.assertFalse(self.read(device(1))["locked"])

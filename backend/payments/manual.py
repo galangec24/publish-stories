@@ -131,7 +131,7 @@ class PaymentMethodListView(APIView):
 
 
 class ManualPaymentView(APIView):
-    """POST /api/payments/manual/ (multipart) — "I paid": story, method, reference, payer_name?, payer_email?, proof?"""
+    """POST /api/payments/manual/ (multipart) — "I paid": story, method, reference, proof (receipt screenshot), payer_name?, payer_email?"""
 
     permission_classes = [permissions.AllowAny]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -169,6 +169,8 @@ class ManualPaymentView(APIView):
 
         proof_bytes = None
         upload = request.FILES.get("proof")
+        if not upload:
+            return Response({"proof": ["Attach the screenshot of your payment receipt."]}, status=400)
         if upload:
             if upload.size > settings.PAYMENT_PROOF_MAX_BYTES:
                 return Response({"proof": ["Screenshots must be 5 MB or smaller."]}, status=400)
