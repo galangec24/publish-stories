@@ -228,7 +228,8 @@ MYMEMORY_EMAIL = os.environ.get("MYMEMORY_EMAIL", "")
 
 PAYMONGO_SECRET_KEY = os.environ.get("PAYMONGO_SECRET_KEY", "")
 PAYMONGO_WEBHOOK_SECRET = os.environ.get("PAYMONGO_WEBHOOK_SECRET", "")
-PAYMONGO_LIVE_MODE = env_bool("PAYMONGO_LIVE_MODE", False)
+# Live or test follows the key (sk_live_... / sk_test_...) unless PAYMONGO_LIVE_MODE says otherwise.
+PAYMONGO_LIVE_MODE = env_bool("PAYMONGO_LIVE_MODE", PAYMONGO_SECRET_KEY.startswith("sk_live_"))
 PAYMONGO_WEBHOOK_TOLERANCE_SECONDS = 300
 
 # Paid stories read without an account (see payments/access.py).

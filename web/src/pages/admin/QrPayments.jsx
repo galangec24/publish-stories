@@ -237,6 +237,7 @@ export function PaymentMethods() {
           <Plus className="h-4 w-4" /> Add QR code
         </button>
       </div>
+      <InstantStatus />
       <p className="mt-1 text-sm text-muted">
         Upload the QR from your GCash (Receive → QR) or bank app. Readers scan it, pay, then send you the reference number to check.
       </p>
@@ -351,4 +352,20 @@ function ScanResult({ scan }) {
           : "This QR isn't a QR Ph payment code. Readers' banking apps may not accept it."}
     </p>
   )
+}
+
+/** Whether PayMongo's instant QR Ph is switched on (keys live in Render, never on this page). */
+function InstantStatus() {
+  const info = useAsync(() => api.get('payment-methods/'), [])
+  if (!info.data) return null
+  const { online_checkout_mode: mode, online_checkout_webhook: webhook } = info.data
+  const [tone, text] =
+    mode === 'off'
+      ? ['bg-surface-2 text-muted', 'Instant QR Ph (PayMongo): off. Readers pay with the QR codes below.']
+      : !webhook
+        ? ['bg-amber-500/15 text-amber-300', `Instant QR Ph (PayMongo): ${mode} key set, but the webhook secret is missing, so it stays hidden from readers.`]
+        : mode === 'test'
+          ? ['bg-sky-500/15 text-sky-300', 'Instant QR Ph (PayMongo): TEST mode. Readers see it, but no real money moves. Switch to live keys when ready.']
+          : ['bg-emerald-500/15 text-emerald-300', 'Instant QR Ph (PayMongo): LIVE. Payments unlock stories automatically.']
+  return <p className={`mt-3 rounded-xl px-3 py-2 text-sm ${tone}`}>{text}</p>
 }

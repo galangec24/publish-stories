@@ -1,12 +1,13 @@
 import json
 import logging
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, permissions, serializers, status
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 
@@ -15,7 +16,8 @@ from catalog.models import Story, StoryView
 from notifications.realtime import push_admins
 from notifications.service import first_name, notify, notify_admins
 
-from .models import PaymentLog, Subscription
+from .access import add_device, device_key, has_full_access, network_key
+from .models import PaymentLog, Subscription, new_access_code
 from .paymongo import PayMongoError, create_checkout_session, verify_signature
 
 logger = logging.getLogger(__name__)
@@ -45,37 +47,51 @@ class PaymentLogSerializer(serializers.ModelSerializer):
 
 
 class SubscribeView(APIView):
-    """POST /api/subscribe/<story_id>/ → {"checkout_url": ..., "subscription": {...}}"""
+    """POST /api/subscribe/<story_id>/ → {"checkout_url": ..., "subscription": {...}}
 
-    permission_classes = [permissions.IsAuthenticated]
+    PayMongo QR Ph checkout. Works without an account: like QR transfers, the purchase
+    unlocks this device, its home network and anyone with the access code. The webhook
+    marks it paid, so no one has to approve it.
+    """
+
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "payment_submit"
 
     def post(self, request, story_id):
         story = get_object_or_404(Story, pk=story_id, status=Story.Status.PUBLISHED)
         if story.is_free:
             return Response({"detail": "This story is free to read."}, status=400)
-        if Subscription.objects.filter(user=request.user, story=story, status=Subscription.Status.PAID).exists():
+        if has_full_access(request, story):
             return Response({"detail": "You've already unlocked this story."}, status=400)
+        user = request.user if request.user.is_authenticated else None
 
-        subscription = Subscription.objects.create(user=request.user, story=story, amount=story.price)
+        with transaction.atomic():
+            subscription = Subscription(user=user, story=story, amount=story.price, provider=Subscription.Provider.PAYMONGO)
+            for _ in range(5):
+                subscription.access_code = new_access_code()
+                try:
+                    with transaction.atomic():
+                        subscription.save()
+                    break
+                except IntegrityError:
+                    continue
+            add_device(subscription, device_key(request), network_key(request))
         try:
             session_id, checkout_url = create_checkout_session(subscription=subscription, story=story)
         except PayMongoError:
             logger.exception("Checkout creation failed for subscription %s", subscription.pk)
             subscription.status = Subscription.Status.FAILED
             subscription.save(update_fields=["status"])
-            return Response({"detail": "Payments are unavailable right now. Please try again."}, status=502)
+            return Response({"detail": "Instant payment is unavailable right now. Please use GCash or bank transfer."}, status=502)
         subscription.checkout_session_id = session_id
         subscription.checkout_url = checkout_url
         subscription.save(update_fields=["checkout_session_id", "checkout_url"])
-        notify_admins(
-            "checkout_started",
-            f"{first_name(request.user)} started checkout: {story.title}",
-            f"{request.user.email} · ₱{story.price}",
-            "/admin/readers",
-        )
+        who = f"{first_name(user)} ({user.email})" if user else "A guest"
+        notify_admins("checkout_started", f"Checkout started: {story.title}", f"{who} · ₱{story.price}", "/admin/readers")
         push_admins("payments.changed", {"subscription": subscription.pk})
         return Response(
-            {"checkout_url": checkout_url, "subscription": SubscriptionSerializer(subscription).data},
+            {"checkout_url": checkout_url, "subscription": SubscriptionSerializer(subscription).data, "access_code": subscription.access_code},
             status=status.HTTP_201_CREATED,
         )
 
@@ -136,7 +152,7 @@ class PayMongoWebhookView(APIView):
                     outcome = "paid"
                     story = subscription.story
                     notify(
-                        [subscription.user_id],
+                        [subscription.user_id] if subscription.user_id else [],
                         "payment_paid",
                         f"Unlocked: {story.title}",
                         "Payment received. Enjoy the full story!",
@@ -145,7 +161,7 @@ class PayMongoWebhookView(APIView):
                     notify_admins(
                         "payment_paid",
                         f"Payment received: {story.title}",
-                        f"{subscription.user.email} paid ₱{subscription.amount}",
+                        f"{subscription.user.email if subscription.user_id else 'A guest'} paid ₱{subscription.amount} via QR Ph",
                         "/admin/readers",
                     )
                     push_admins("payments.changed", {"subscription": subscription.pk})

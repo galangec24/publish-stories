@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from payments.access import purchases_for
 from payments.manual import PurchaseSerializer
+from payments.models import Subscription
 
 from .analytics import platform_stats, record_view
 from .models import Chapter, Column, Genre, Story
@@ -116,7 +117,8 @@ class StoryDetailView(APIView):
         data = StoryListSerializer(story, context={"request": request}).data
         purchase = None
         if locked:  # e.g. a QR payment the author hasn't confirmed yet
-            latest = purchases_for(request, story).select_related("story", "method").order_by("-created_at").first()
+            mine = purchases_for(request, story).filter(provider=Subscription.Provider.MANUAL)
+            latest = mine.select_related("story", "method").order_by("-created_at").first()
             purchase = PurchaseSerializer(latest).data if latest else None
         data.update(chapters=chapters, locked=locked, has_access=full_access, purchase=purchase)
         return Response(data)

@@ -1,4 +1,4 @@
-import { Building2, CheckCircle2, Clock, Copy, Download, ImagePlus, KeyRound, Lock, QrCode, ShieldCheck, TriangleAlert, Wallet, Wifi } from 'lucide-react'
+import { Building2, CheckCircle2, Clock, Copy, Download, ImagePlus, KeyRound, Lock, QrCode, ShieldCheck, TriangleAlert, Wallet, Wifi, Zap } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
@@ -14,12 +14,32 @@ const methodLabel = (method) => (isWallet(method) ? method.name : `Bank transfer
 
 /** Shown at the end of the free chapters: pick GCash or a bank, then scan a QR that already has the price. */
 export function QrPaywall({ story, signedIn, onUnlocked }) {
-  const methods = useAsync(() => api.get('payment-methods/').then((d) => d.methods), [])
+  const toast = useToast()
+  const options = useAsync(() => api.get('payment-methods/'), [])
   const [open, setOpen] = useState(null) // { methodId } or { code: true }
+  const [redirecting, setRedirecting] = useState(false)
   const purchase = story.purchase
   const pending = purchase?.status === 'pending'
   const free = story.free_chapters
-  const list = methods.data || []
+  const list = options.data?.methods || []
+  const instant = options.data?.online_checkout
+
+  // PayMongo's page shows a QR Ph code with the amount set; its webhook unlocks the story, no approval needed.
+  async function payInstantly() {
+    setRedirecting(true)
+    try {
+      const { checkout_url, access_code } = await api.post(`subscribe/${story.id}/`)
+      try {
+        localStorage.setItem(`access-code:${story.slug}`, access_code)
+      } catch {
+        /* the device still unlocks without it */
+      }
+      window.location.assign(checkout_url) // same tab: pop-ups opened after a request get blocked
+    } catch (e) {
+      setRedirecting(false)
+      toast(e, 'error')
+    }
+  }
 
   return (
     <div className="relative mt-6 break-inside-avoid">
@@ -52,19 +72,24 @@ export function QrPaywall({ story, signedIn, onUnlocked }) {
               </p>
             )}
             <div className="mt-5 flex flex-wrap justify-center gap-3">
-              {methods.loading && !methods.data ? (
+              {instant && (
+                <button className="btn-primary" onClick={payInstantly} disabled={redirecting}>
+                  <Zap className="h-4 w-4" /> {redirecting ? 'Opening secure payment…' : 'Instant QR Ph (unlocks right away)'}
+                </button>
+              )}
+              {options.loading && !options.data ? (
                 <button className="btn-primary" disabled>Loading payment options…</button>
               ) : list.length ? (
                 list.map((m) => {
                   const Icon = isWallet(m) ? Wallet : Building2
                   return (
-                    <button key={m.id} className="btn-primary" onClick={() => setOpen({ methodId: m.id })}>
+                    <button key={m.id} className={instant ? 'btn-ghost' : 'btn-primary'} onClick={() => setOpen({ methodId: m.id })}>
                       <Icon className="h-4 w-4" /> Pay with {methodLabel(m)}
                     </button>
                   )
                 })
               ) : (
-                <p className="text-sm text-muted">Payments open soon. Please check back.</p>
+                !instant && <p className="text-sm text-muted">Payments open soon. Please check back.</p>
               )}
             </div>
             <button type="button" className="mt-4 inline-flex items-center gap-1.5 text-sm text-brand hover:underline" onClick={() => setOpen({ code: true })}>

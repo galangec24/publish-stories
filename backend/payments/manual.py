@@ -111,7 +111,10 @@ class PaymentMethodListView(APIView):
         return Response(
             {
                 "methods": PaymentMethodSerializer(methods, many=True).data,
-                "online_checkout": bool(settings.PAYMONGO_SECRET_KEY),
+                "online_checkout": bool(settings.PAYMONGO_SECRET_KEY and settings.PAYMONGO_WEBHOOK_SECRET),
+                # Not secret; lets the admin confirm the keys without anyone looking at them.
+                "online_checkout_mode": ("live" if settings.PAYMONGO_LIVE_MODE else "test") if settings.PAYMONGO_SECRET_KEY else "off",
+                "online_checkout_webhook": bool(settings.PAYMONGO_WEBHOOK_SECRET),
             }
         )
 

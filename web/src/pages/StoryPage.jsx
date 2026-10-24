@@ -34,11 +34,30 @@ export function StoryPage() {
     api.post(`stories/${slug}/view/`).then(setCounts).catch(() => {})
   }, [slug])
 
-  // Back from PayMongo: ?payment=success. Re-fetch; the webhook may already be in.
+  // Back from PayMongo: ?payment=success. The webhook may land a few seconds later, so check a few times.
   useEffect(() => {
     if (params.get('payment') === 'success') {
+      setParams({}, { replace: true })
       toast('Payment received. Unlocking your story…')
-      story.reload()
+      let tries = 0
+      const check = async () => {
+        const data = await story.reload()
+        if (data?.has_access) {
+          let code = null
+          try {
+            code = localStorage.getItem(`access-code:${slug}`)
+          } catch {
+            /* ignore */
+          }
+          toast(code ? `Unlocked! Your access code for other devices: ${code}` : 'Unlocked! Enjoy the full story.')
+        } else if (++tries < 8) {
+          setTimeout(check, 4000)
+        } else {
+          toast('Still waiting for the payment to confirm. This page will unlock when you reload in a minute.')
+        }
+      }
+      check()
+    } else if (params.get('payment') === 'cancelled') {
       setParams({}, { replace: true })
     }
     // From the "Unlocked" email: ?code=ABCD-EFGH opens the story on this device.

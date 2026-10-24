@@ -54,6 +54,20 @@ class PaymentTests(APITestCase):
         self.assertFalse(self.client.get(f"/api/stories/{self.story.slug}/").data["locked"])
         self.assertEqual(self.subscribe().status_code, 400)
 
+    def test_guest_checkout_unlocks_their_device(self):
+        self.client.force_authenticate(None)
+        guest = {"HTTP_X_VIEWER_ID": "guest-device-0001-aaaa", "HTTP_X_FORWARDED_FOR": "49.145.10.20"}
+        with mock.patch("payments.views.create_checkout_session", return_value=("cs_1", "https://pay.example/cs_1")):
+            response = self.client.post(f"/api/subscribe/{self.story.id}/", **guest)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertRegex(response.data["access_code"], r"^[A-Z2-9]{4}-[A-Z2-9]{4}$")
+        self.assertFalse(self.client.get(f"/api/stories/{self.story.slug}/", **guest).data["has_access"])
+
+        body = self.paid_event()
+        self.assertEqual(self.webhook(body, signed_headers(body)).data["status"], "paid")
+        self.assertTrue(self.client.get(f"/api/stories/{self.story.slug}/", **guest).data["has_access"])
+        self.assertFalse(self.client.get(f"/api/stories/{self.story.slug}/", HTTP_X_VIEWER_ID="someone-else-0002-bbbb").data["has_access"])
+
     def test_bad_signature_rejected(self):
         self.subscribe()
         body = self.paid_event()
