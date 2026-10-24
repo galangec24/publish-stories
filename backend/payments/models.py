@@ -19,6 +19,9 @@ class PaymentMethod(models.Model):
     account_name = models.CharField(max_length=120, blank=True)
     account_number = models.CharField(max_length=60, blank=True, help_text="Shown as typed, so mask it if you like")
     qr_url = models.URLField(max_length=500)
+    # The text inside the QR (QR Ph / EMVCo). With it the site can draw the same QR with the
+    # story's price filled in, so readers don't type the amount.
+    qr_payload = models.CharField(max_length=512, blank=True)
     instructions = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveSmallIntegerField(default=0)

@@ -144,12 +144,27 @@ export function QrPayments() {
   )
 }
 
-const EMPTY = { name: '', account_name: '', account_number: '', qr_url: '', instructions: '', is_active: true, sort_order: 0 }
+const EMPTY = { name: '', account_name: '', account_number: '', qr_url: '', qr_payload: '', instructions: '', is_active: true, sort_order: 0 }
 
 /** The QR codes readers scan (GCash, bank InstaPay, ...). */
 export function PaymentMethods() {
   const toast = useToast()
   const methods = useAsync(() => api.get('admin/payment-methods/'), [])
+
+  // QR codes saved before amounts were supported: read them once so readers' QRs carry the price.
+  useEffect(() => {
+    const missing = (methods.data || []).filter((m) => !m.qr_payload && m.qr_url)
+    if (!missing.length) return
+    Promise.all(
+      missing.map(async (m) => {
+        const blob = await fetch(m.qr_url).then((r) => (r.ok ? r.blob() : Promise.reject(new Error(r.status))))
+        const text = await readQrFromFile(blob)
+        if (parseQrPh(text)?.valid) await api.patch(`admin/payment-methods/${m.id}/`, { qr_payload: text })
+      }),
+    )
+      .then(() => methods.reload())
+      .catch(() => {})
+  }, [methods.data]) // eslint-disable-line react-hooks/exhaustive-deps
   const [form, setForm] = useState(null)
   const [busy, setBusy] = useState(false)
   const [scan, setScan] = useState(null) // what was read from the uploaded QR
@@ -165,6 +180,8 @@ export function PaymentMethods() {
       .then((text) => {
         const info = parseQrPh(text)
         setScan(info ? { ...info, found: true } : { found: Boolean(text) })
+        // Keep the code's contents so readers get a QR with the story price already in it.
+        setForm((f) => ({ ...f, qr_payload: info?.valid ? text : '' }))
         if (!info) return
         setForm((f) => ({
           ...f,
@@ -239,6 +256,9 @@ export function PaymentMethods() {
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold">{m.name} {!m.is_active && <span className="text-xs text-muted">(hidden)</span>}</p>
                   <p className="truncate text-xs text-muted">{[m.account_name, m.account_number].filter(Boolean).join(' · ')}</p>
+                  <p className={`mt-0.5 text-[11px] ${m.qr_payload ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {m.qr_payload ? 'Amount fills in when readers scan' : 'Readers type the amount (re-upload the original QR to fix)'}
+                  </p>
                 </div>
                 <button className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-ink" title={m.is_active ? 'Hide from readers' : 'Show to readers'} onClick={() => toggle(m)}>
                   {m.is_active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}

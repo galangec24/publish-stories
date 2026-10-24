@@ -84,6 +84,9 @@ export function CommentsAdmin() {
                     {c.user.first_name} {c.user.last_name}
                   </span>{' '}
                   <span className="text-muted">({c.user.email})</span>
+                  <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${c.user.is_admin ? 'bg-brand/15 text-brand' : 'bg-surface-2 text-muted'}`}>
+                    {c.user.is_admin ? 'Admin' : 'Reader'}
+                  </span>
                   {c.parent && <span className="ml-1 text-xs text-muted">· reply</span>}
                   {c.is_hidden && <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs text-amber-500">Hidden</span>}
                 </p>

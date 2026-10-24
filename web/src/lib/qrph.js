@@ -96,10 +96,28 @@ export function parseQrPh(payload) {
   }
 }
 
+/**
+ * The same payment QR with a fixed amount, as GCash makes when you set an amount in Receive:
+ * point of initiation 12 ("dynamic"), the amount in tag 54, and a fresh checksum.
+ * Returns null if the payload can't be read.
+ */
+export function withAmount(payload, amount) {
+  const fields = parseTlv(payload)
+  if (!fields['00'] || !fields['63']) return null
+  delete fields['63']
+  fields['01'] = '12'
+  fields['54'] = Number(amount).toFixed(2)
+  const body = Object.keys(fields)
+    .sort()
+    .map((tag) => `${tag}${String(fields[tag].length).padStart(2, '0')}${fields[tag]}`)
+    .join('')
+  return `${body}6304${crc16(`${body}6304`)}`
+}
+
 /** Finds and reads the QR code in an image file. Resolves to the text inside, or null. */
 export async function readQrFromFile(file) {
   const { default: jsQR } = await import('jsqr')
-  const bitmap = await createImageBitmap(file)
+  const bitmap = await createImageBitmap(file) // a File or any Blob
   // Big phone screenshots are slow to scan; QR codes survive downscaling well.
   const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height))
   const canvas = document.createElement('canvas')

@@ -34,10 +34,31 @@ logger = logging.getLogger(__name__)
 _REFERENCE = re.compile(r"^[A-Za-z0-9-]{4,40}$")
 
 
+def _crc16(text):
+    """CRC-16/CCITT-FALSE, the checksum QR Ph puts in its last field (tag 63)."""
+    crc = 0xFFFF
+    for byte in text.encode():
+        crc ^= byte << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
+    return f"{crc:04X}"
+
+
+def is_qrph(payload):
+    """A QR Ph / EMVCo payment code with an intact checksum."""
+    return payload.startswith("000201") and len(payload) > 8 and payload[-8:-4] == "6304" and _crc16(payload[:-4]) == payload[-4:].upper()
+
+
 class PaymentMethodSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentMethod
-        fields = ["id", "name", "account_name", "account_number", "qr_url", "instructions", "is_active", "sort_order"]
+        fields = ["id", "name", "account_name", "account_number", "qr_url", "qr_payload", "instructions", "is_active", "sort_order"]
+
+    def validate_qr_payload(self, value):
+        value = value.strip()
+        if value and not is_qrph(value):
+            raise serializers.ValidationError("That isn't a valid QR Ph payment code.")
+        return value
 
     def validate_qr_url(self, value):
         if not value.startswith("https://") and not settings.DEBUG:

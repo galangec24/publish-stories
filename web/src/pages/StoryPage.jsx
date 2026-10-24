@@ -1,6 +1,6 @@
 import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, Eye, Lock, MessageCircle, ScrollText, UsersRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { BookReader } from '../components/BookReader'
 import { ProtectedContent } from '../components/ProtectedContent'
@@ -19,7 +19,6 @@ export function StoryPage() {
   const [params, setParams] = useSearchParams()
   const { user } = useAuth()
   const toast = useToast()
-  const navigate = useNavigate()
   const story = useAsync(() => api.get(`stories/${slug}/`), [slug, user?.id])
   const [mode, setMode] = useReadingMode()
   const [index, setIndex] = useState(0)
@@ -28,10 +27,7 @@ export function StoryPage() {
   const [counts, setCounts] = useState(null)
   const [social, setSocial] = useState({ liked: false }) // likes + comments, kept fresh by StoryComments
   const updateSocial = (patch) => setSocial((x) => ({ ...x, ...patch }))
-  const poll = useRef()
   const top = useRef()
-
-  useEffect(() => () => clearInterval(poll.current), [])
 
   // Count this visit (once per reader per day, server-side) and show live totals.
   useEffect(() => {
@@ -75,38 +71,6 @@ export function StoryPage() {
     if (mode === 'scroll') top.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  // Optional PayMongo checkout (signed-in readers, when the server has PayMongo keys).
-  async function payOnline() {
-    if (!user) {
-      navigate('/login', { state: { from: `/stories/${slug}` } })
-      return
-    }
-    try {
-      const { checkout_url, subscription } = await api.post(`subscribe/${s.id}/`)
-      window.open(checkout_url, '_blank', 'noopener')
-      toast('Finish paying in the new tab. This page unlocks by itself.')
-      let ticks = 0
-      clearInterval(poll.current)
-      poll.current = setInterval(async () => {
-        if (++ticks > 150) return clearInterval(poll.current)
-        try {
-          const sub = await api.get(`subscriptions/${subscription.id}/`)
-          if (sub.status === 'paid') {
-            clearInterval(poll.current)
-            await story.reload()
-            toast('Unlocked! Enjoy the full story.')
-          } else if (sub.status === 'failed') {
-            clearInterval(poll.current)
-          }
-        } catch {
-          /* keep polling */
-        }
-      }, 4000)
-    } catch (e) {
-      toast(e, 'error')
-    }
-  }
-
   const chapterBody = (
     <>
       <p className="text-xs tracking-[0.25em] text-muted uppercase">
@@ -115,7 +79,7 @@ export function StoryPage() {
       <h2 className="mt-2 mb-8 text-3xl text-page-ink" style={{ fontFamily: titleStack(s.title_font) }}>{chapter?.title}</h2>
       {chapter?.content && <DeltaView ops={chapter.content} fontFamily={fontStack(s.font_family)} fontSize={s.font_size} />}
       {showPaywall && (
-        <QrPaywall story={s} signedIn={!!user} onUnlocked={story.reload} onOnlineCheckout={payOnline} />
+        <QrPaywall story={s} signedIn={!!user} onUnlocked={story.reload} />
       )}
     </>
   )

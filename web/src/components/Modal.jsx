@@ -9,12 +9,15 @@ const stack = []
 export function Modal({ open, onClose, title, subtitle, icon: Icon, children, footer, size = 'max-w-lg' }) {
   const panel = useRef(null)
   const titleId = useId()
+  // Callers pass inline functions; keep the latest without re-running the open/focus effect each render.
+  const close = useRef(onClose)
+  close.current = onClose
 
   useEffect(() => {
     if (!open) return
     const token = {}
     stack.push(token)
-    const onKey = (e) => e.key === 'Escape' && stack[stack.length - 1] === token && onClose()
+    const onKey = (e) => e.key === 'Escape' && stack[stack.length - 1] === token && close.current()
     document.addEventListener('keydown', onKey)
     const overflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -25,7 +28,7 @@ export function Modal({ open, onClose, title, subtitle, icon: Icon, children, fo
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = overflow
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
   return createPortal(

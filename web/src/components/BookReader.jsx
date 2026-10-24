@@ -84,6 +84,8 @@ export function BookReader({ children, onPrevChapter, onNextChapter, hasPrev, ha
   }, [turn, page])
 
   const onPointerDown = (e) => {
+    // React passes events from portals (e.g. the unlock dialog) up to here; only the page itself turns pages.
+    if (!frame.current.contains(e.target) || e.target.closest('button, a, input, textarea, select, label')) return
     pointer.current = { x: e.clientX, y: e.clientY, t: Date.now() }
   }
   const onPointerUp = (e) => {

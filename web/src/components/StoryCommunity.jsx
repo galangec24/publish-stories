@@ -1,4 +1,4 @@
-import { Heart, LogIn, MessageCircle, Reply, Send, ShieldCheck, Trash2 } from 'lucide-react'
+import { Heart, LogIn, MessageCircle, Reply, Send, ShieldCheck, Trash2, UserRound } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
@@ -110,9 +110,13 @@ function CommentItem({ comment, onReply, onDelete, isReply = false }) {
         <div className="rounded-2xl rounded-tl-md bg-surface-2/70 px-4 py-2.5">
           <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
             {comment.user.first_name} {comment.user.last_name}
-            {comment.user.is_admin && (
+            {comment.user.is_admin ? (
               <span className="inline-flex items-center gap-0.5 rounded-full bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand">
-                <ShieldCheck className="h-3 w-3" /> Author
+                <ShieldCheck className="h-3 w-3" /> Admin
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-muted ring-1 ring-line">
+                <UserRound className="h-3 w-3" /> Reader
               </span>
             )}
           </p>

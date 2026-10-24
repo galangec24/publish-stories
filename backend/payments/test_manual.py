@@ -159,3 +159,20 @@ class ManualPaymentTests(APITestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["status"], "published")
         self.assertEqual(response.data["price"], "35.00")
+
+
+class QrPayloadTests(APITestCase):
+    # A sample InstaPay P2P code (made-up account) with a correct checksum.
+    PAYLOAD = "00020101021127530012com.p2pqrpay0111GXCHPHM2XXX02089996440304126789012345204601653036085802PH5903MGV6005Davao6304"
+
+    def test_payload_is_validated_and_shared(self):
+        from .manual import _crc16
+
+        good = self.PAYLOAD + _crc16(self.PAYLOAD)
+        admin = User.objects.create_user(email="admin@example.com", password="x", is_admin=True)
+        self.client.force_authenticate(admin)
+        body = {"name": "GCash", "qr_url": "https://example.com/qr.webp"}
+        self.assertEqual(self.client.post("/api/admin/payment-methods/", {**body, "qr_payload": good[:-1] + "0"}, format="json").status_code, 400)
+        self.assertEqual(self.client.post("/api/admin/payment-methods/", {**body, "qr_payload": good}, format="json").status_code, 201)
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get("/api/payment-methods/").data["methods"][0]["qr_payload"], good)
