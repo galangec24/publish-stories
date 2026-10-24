@@ -1,10 +1,11 @@
-import { Check, Eye, EyeOff, ImagePlus, MonitorSmartphone, Pencil, Plus, QrCode, ReceiptText, Trash2, UserRound, X } from 'lucide-react'
+import { BadgeCheck, Check, Eye, EyeOff, ImagePlus, MonitorSmartphone, Pencil, Plus, QrCode, ReceiptText, Trash2, TriangleAlert, UserRound, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Modal } from '../../components/Modal'
 import { Spinner, useToast } from '../../components/ui'
 import { api } from '../../lib/api'
+import { accountLabel, parseQrPh, readQrFromFile } from '../../lib/qrph'
 import { timeAgo } from '../../lib/time'
 import { useAsync } from '../../lib/useAsync'
 import { onLiveEvent } from '../../realtime/LiveProvider'
@@ -151,12 +152,29 @@ export function PaymentMethods() {
   const methods = useAsync(() => api.get('admin/payment-methods/'), [])
   const [form, setForm] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [scan, setScan] = useState(null) // what was read from the uploaded QR
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
 
   async function uploadQr(file) {
     const data = new FormData()
     data.append('image', file)
     setBusy(true)
+    setScan(null)
+    // Read the QR like a banking app would and fill in who it pays (the admin can still edit).
+    readQrFromFile(file)
+      .then((text) => {
+        const info = parseQrPh(text)
+        setScan(info ? { ...info, found: true } : { found: Boolean(text) })
+        if (!info) return
+        setForm((f) => ({
+          ...f,
+          name: info.institution || f.name,
+          account_name: info.accountName || f.account_name,
+          account_number: accountLabel(info) || f.account_number,
+          instructions: f.instructions || 'InstaPay QR: you can pay from any bank or e-wallet app. Transfer fees may apply.',
+        }))
+      })
+      .catch(() => setScan({ found: false }))
     try {
       const { url } = await api.upload('admin/images/', data)
       setForm((f) => ({ ...f, qr_url: url }))
@@ -237,7 +255,15 @@ export function PaymentMethods() {
         </div>
       )}
 
-      <Modal open={!!form} onClose={() => setForm(null)} title={form?.id ? `Edit ${form.name}` : 'Add a QR code'} icon={QrCode}>
+      <Modal
+        open={!!form}
+        onClose={() => {
+          setForm(null)
+          setScan(null)
+        }}
+        title={form?.id ? `Edit ${form.name}` : 'Add a QR code'}
+        icon={QrCode}
+      >
         {form && (
           <form onSubmit={save} className="space-y-4">
             <label className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border border-dashed border-line p-4 text-sm hover:border-brand">
@@ -249,6 +275,7 @@ export function PaymentMethods() {
               <span className="text-muted">{busy ? 'Uploading…' : form.qr_url ? 'Change image' : 'Upload the QR image'}</span>
               <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files[0] && uploadQr(e.target.files[0])} />
             </label>
+            {scan && <ScanResult scan={scan} />}
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="text-sm font-medium">Name</span>
@@ -278,5 +305,30 @@ export function PaymentMethods() {
         )}
       </Modal>
     </div>
+  )
+}
+
+function ScanResult({ scan }) {
+  if (scan.found && scan.valid !== undefined && scan.valid) {
+    return (
+      <p className="flex items-start gap-2 rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-300">
+        <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>
+          QR Ph code read: pays <b>{scan.accountName || 'this account'}</b>
+          {scan.institution ? ` via ${scan.institution}` : scan.bic ? ` (bank code ${scan.bic})` : ''}. The details below were filled in; check
+          them and change anything you like.
+        </span>
+      </p>
+    )
+  }
+  return (
+    <p className="flex items-start gap-2 rounded-xl bg-amber-500/10 p-3 text-sm text-amber-300">
+      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+      {!scan.found
+        ? "Couldn't find a QR code in this picture. Try the original QR image (not a photo of a screen), or fill in the details by hand."
+        : scan.valid === false
+          ? "This QR looks damaged (its checksum doesn't match). Readers may not be able to pay with it. Try the original image."
+          : "This QR isn't a QR Ph payment code. Readers' banking apps may not accept it."}
+    </p>
   )
 }
