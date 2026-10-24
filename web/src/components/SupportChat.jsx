@@ -1,4 +1,4 @@
-import { Headset, LogIn, MessageCircle, Send, X } from 'lucide-react'
+import { Headset, LogIn, MessageCircle, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -6,6 +6,7 @@ import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { timeAgo } from '../lib/time'
 import { onLiveEvent, useLive } from '../realtime/LiveProvider'
+import { ChatComposer, MessageContent, sendChatMessage } from './ChatExtras'
 import { useToast } from './ui'
 
 /** Floating "Messenger-style" support chat for readers. Replies arrive live. */
@@ -14,8 +15,6 @@ export function SupportChat() {
   const { chatOpen: open, setChatOpen: setOpen } = useLive()
   const toast = useToast()
   const [messages, setMessages] = useState(null)
-  const [draft, setDraft] = useState('')
-  const [sending, setSending] = useState(false)
   const [badge, setBadge] = useState(0)
   const list = useRef(null)
   const openRef = useRef(open)
@@ -47,20 +46,9 @@ export function SupportChat() {
     list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' })
   }, [messages, open])
 
-  async function send(e) {
-    e.preventDefault()
-    const body = draft.trim()
-    if (!body) return
-    setSending(true)
-    try {
-      const m = await api.post('support/messages/', { body })
-      setMessages((list) => (list?.some((x) => x.id === m.id) ? list : [...(list || []), m]))
-      setDraft('')
-    } catch (err) {
-      toast(err, 'error')
-    } finally {
-      setSending(false)
-    }
+  async function send(message) {
+    const m = await sendChatMessage('support/messages/', message)
+    setMessages((list) => (list?.some((x) => x.id === m.id) ? list : [...(list || []), m]))
   }
 
   return (
@@ -120,12 +108,12 @@ export function SupportChat() {
                 {messages?.map((m) => (
                   <div key={m.id} className={`flex ${m.from_admin ? 'justify-start' : 'justify-end'}`}>
                     <div
-                      className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap ${
+                      className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${
                         m.from_admin ? 'rounded-bl-md bg-surface-2' : 'rounded-br-md bg-brand text-white'
                       }`}
                       title={new Date(m.created_at).toLocaleString()}
                     >
-                      {m.body}
+                      <MessageContent m={m} mine={!m.from_admin} />
                       <span className={`mt-0.5 block text-[10px] ${m.from_admin ? 'text-muted' : 'text-white/70'}`}>
                         {m.from_admin ? 'Support · ' : ''}
                         {timeAgo(m.created_at)}
@@ -134,22 +122,7 @@ export function SupportChat() {
                   </div>
                 ))}
               </div>
-              <form onSubmit={send} className="flex items-end gap-2 border-t border-line p-2">
-                <textarea
-                  className="input max-h-28 min-h-11 flex-1 resize-none !rounded-2xl !py-2.5"
-                  rows={1}
-                  placeholder="Write a message…"
-                  value={draft}
-                  maxLength={2000}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) send(e)
-                  }}
-                />
-                <button className="btn-primary h-11 w-11 !p-0" disabled={sending || !draft.trim()} aria-label="Send">
-                  <Send className="h-5 w-5" />
-                </button>
-              </form>
+              <ChatComposer onSend={send} />
             </>
           )}
         </section>

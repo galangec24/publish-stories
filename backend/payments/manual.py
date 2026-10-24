@@ -274,9 +274,10 @@ class AdminPaymentMethodViewSet(viewsets.ModelViewSet):
 
 
 class AdminManualPaymentListView(APIView):
-    """GET /api/admin/payments/manual/?status=pending|paid|rejected|all
+    """GET /api/admin/payments/manual/?status=pending|paid|rejected|all&q=text
 
     pending = unlocked but not yet checked, paid = confirmed, rejected = revoked.
+    q searches the reference number, payer name/email, account email, story title and access code.
     """
 
     permission_classes = [IsAdmin]
@@ -294,6 +295,17 @@ class AdminManualPaymentListView(APIView):
             queryset = queryset.filter(status=Subscription.Status.PAID, reviewed_at__isnull=False)
         elif wanted != "all":
             queryset = queryset.filter(status=wanted)
+        q = request.query_params.get("q", "").strip()
+        if q:
+            queryset = queryset.filter(
+                Q(reference_number__icontains=q.replace(" ", ""))
+                | Q(payer_name__icontains=q)
+                | Q(payer_email__icontains=q)
+                | Q(user__email__icontains=q)
+                | Q(user__first_name__icontains=q)
+                | Q(story__title__icontains=q)
+                | Q(access_code__iexact=q.upper())
+            )
         pending = manual.filter(to_check)
         return Response(
             {

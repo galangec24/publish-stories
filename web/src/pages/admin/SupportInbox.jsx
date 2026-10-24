@@ -1,6 +1,7 @@
-import { ArrowLeft, Inbox, Mail, Send } from 'lucide-react'
+import { ArrowLeft, Inbox, Mail } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { ChatComposer, MessageContent, previewOf, sendChatMessage } from '../../components/ChatExtras'
 import { Avatar } from '../../components/HeaderMenus'
 import { Spinner, useToast } from '../../components/ui'
 import { api } from '../../lib/api'
@@ -13,8 +14,6 @@ export function SupportInbox() {
   const [threads, setThreads] = useState(null)
   const [activeId, setActiveId] = useState(null)
   const [thread, setThread] = useState(null)
-  const [draft, setDraft] = useState('')
-  const [sending, setSending] = useState(false)
   const list = useRef(null)
   const activeRef = useRef(null)
   activeRef.current = activeId
@@ -57,20 +56,9 @@ export function SupportInbox() {
     list.current?.scrollTo({ top: list.current.scrollHeight })
   }, [thread])
 
-  async function reply(e) {
-    e.preventDefault()
-    const body = draft.trim()
-    if (!body || !activeId) return
-    setSending(true)
-    try {
-      const m = await api.post(`admin/support/${activeId}/messages/`, { body })
-      setThread((t) => (t.messages.some((x) => x.id === m.id) ? t : { ...t, messages: [...t.messages, m] }))
-      setDraft('')
-    } catch (err) {
-      toast(err, 'error')
-    } finally {
-      setSending(false)
-    }
+  async function reply(message) {
+    const m = await sendChatMessage(`admin/support/${activeId}/messages/`, message)
+    setThread((t) => (t.messages.some((x) => x.id === m.id) ? t : { ...t, messages: [...t.messages, m] }))
   }
 
   if (!threads) return <Spinner />
@@ -102,7 +90,7 @@ export function SupportInbox() {
                 <span className="block truncate text-xs text-muted">{t.user.email}</span>
                 <span className={`mt-0.5 block truncate text-sm ${t.unread_for_admin ? 'font-semibold text-ink' : 'text-muted'}`}>
                   {t.last_message?.from_admin ? 'You: ' : ''}
-                  {t.last_message?.body}
+                  {previewOf(t.last_message)}
                 </span>
               </span>
               {t.unread_for_admin > 0 && (
@@ -139,30 +127,17 @@ export function SupportInbox() {
                 {thread.messages.map((m) => (
                   <div key={m.id} className={`flex ${m.from_admin ? 'justify-end' : 'justify-start'}`}>
                     <div
-                      className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap ${m.from_admin ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md bg-surface-2'}`}
+                      className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-sm ${m.from_admin ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md bg-surface-2'}`}
                       title={new Date(m.created_at).toLocaleString()}
                     >
                       {!m.from_admin && <span className="mb-0.5 block text-[11px] font-semibold text-brand">{m.sender_name}</span>}
-                      {m.body}
+                      <MessageContent m={m} mine={m.from_admin} />
                       <span className={`mt-0.5 block text-[10px] ${m.from_admin ? 'text-white/70' : 'text-muted'}`}>{timeAgo(m.created_at)}</span>
                     </div>
                   </div>
                 ))}
               </div>
-              <form onSubmit={reply} className="flex items-end gap-2 border-t border-line p-3">
-                <textarea
-                  className="input max-h-32 min-h-11 flex-1 resize-none !rounded-2xl"
-                  rows={1}
-                  placeholder={`Reply to ${thread.user.first_name}…`}
-                  value={draft}
-                  maxLength={2000}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && reply(e)}
-                />
-                <button className="btn-primary h-11 w-11 !p-0" disabled={sending || !draft.trim()} aria-label="Send reply">
-                  <Send className="h-5 w-5" />
-                </button>
-              </form>
+              <ChatComposer onSend={reply} placeholder={`Reply to ${thread.user.first_name}…`} />
             </>
           )}
         </section>

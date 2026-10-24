@@ -1,5 +1,6 @@
 import { Building2, CheckCircle2, Copy, Download, ImagePlus, KeyRound, Lock, ReceiptText, ShieldCheck, TriangleAlert, Wallet, Wifi, Zap } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { api } from '../lib/api'
 import { parseQrPh, readQrFromFile, withAmount } from '../lib/qrph'
@@ -141,6 +142,9 @@ export function QrPaywall({ story, signedIn, onUnlocked }) {
         <button type="button" className="mt-3 flex w-full items-center justify-center gap-1.5 text-sm text-brand hover:underline" onClick={() => setDialog('code')}>
           <KeyRound className="h-4 w-4" /> Paid on another device? Enter your access code
         </button>
+        <Link to="/purchases" className="mt-1 block text-xs text-muted hover:text-brand hover:underline">
+          Check my payments
+        </Link>
       </div>
 
       <PaidDialog

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import manual, views
+from . import manual, reports, views
 
 urlpatterns = [
     path("subscribe/<int:story_id>/", views.SubscribeView.as_view()),
@@ -11,4 +11,5 @@ urlpatterns = [
     path("payments/manual/", manual.ManualPaymentView.as_view()),
     path("payments/manual/<str:code>/", manual.PurchaseStatusView.as_view()),
     path("access/claim/", manual.ClaimAccessView.as_view()),
+    path("my-purchases/", reports.MyPurchasesView.as_view()),
 ]

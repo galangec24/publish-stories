@@ -60,8 +60,14 @@ services:
         sync: false
       - key: PAYMONGO_WEBHOOK_SECRET
         sync: false
-      - key: PAYMONGO_LIVE_MODE
-        value: "False"
+      # Live/test mode follows the PayMongo key (sk_live_ / sk_test_), so it isn't set here.
+      - key: GIPHY_API_KEY
+        sync: false
+      # Chat attachments: Supabase → Project Settings → API (project URL + service_role key).
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
       # Add later in the Environment tab when needed (not prompted on first deploy):
       #   GOOGLE_DESKTOP_CLIENT_ID / GOOGLE_DESKTOP_CLIENT_SECRET  (Windows app sign-in)
       #   GS_BUCKET_NAME + GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/gcs.json  (cover images in Firebase Storage)

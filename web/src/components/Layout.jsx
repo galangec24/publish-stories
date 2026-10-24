@@ -89,6 +89,7 @@ export function Layout() {
         <footer className="relative border-t border-line/60 py-8 text-center text-sm text-muted">
           <nav className="flex flex-wrap justify-center gap-x-5 gap-y-2">
             <Link to="/#about" className="hover:text-ink">About</Link>
+            <Link to="/purchases" className="hover:text-ink">My purchases</Link>
             <Link to="/privacy" className="hover:text-ink">Privacy Policy</Link>
             <Link to="/terms" className="hover:text-ink">Terms of Service</Link>
           </nav>

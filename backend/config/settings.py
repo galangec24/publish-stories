@@ -234,6 +234,14 @@ PAYMONGO_WEBHOOK_SECRET = os.environ.get("PAYMONGO_WEBHOOK_SECRET", "")
 PAYMONGO_LIVE_MODE = env_bool("PAYMONGO_LIVE_MODE", PAYMONGO_SECRET_KEY.startswith("sk_live_"))
 PAYMONGO_WEBHOOK_TOLERANCE_SECONDS = 300
 
+# Chat extras. GIF search uses GIPHY; attachments go to a private Supabase Storage bucket
+# (service key from Supabase → Project Settings → API), or the database when not set.
+GIPHY_API_KEY = os.environ.get("GIPHY_API_KEY", "")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+CHAT_FILE_MAX_BYTES = 10 * 1024 * 1024
+CHAT_FILE_DB_MAX_BYTES = 3 * 1024 * 1024
+
 # Paid stories read without an account (see payments/access.py).
 ACCESS_MAX_DEVICES = int(os.environ.get("ACCESS_MAX_DEVICES", "5"))
 ACCESS_NETWORK_DAYS = int(os.environ.get("ACCESS_NETWORK_DAYS", "30"))

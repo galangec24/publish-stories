@@ -1,4 +1,4 @@
-import { FileUp, FolderKanban, History, Library, MailQuestion, MessageSquareText, MessagesSquare, QrCode, ReceiptText, ScanLine, Tags, UserRoundPen, UsersRound } from 'lucide-react'
+import { BarChart3, FileUp, FolderKanban, History, Library, MailQuestion, MessageSquareText, MessagesSquare, QrCode, ReceiptText, ScanLine, Tags, UserRoundPen, UsersRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 
@@ -11,6 +11,7 @@ import { CommentsAdmin } from './CommentsAdmin'
 import { EmailRequests } from './EmailRequests'
 import { Columns, Genres, Payments } from './Managers'
 import { PaymentMethods, QrPayments } from './QrPayments'
+import { SalesReport } from './SalesReport'
 import { ReadersMonitor } from './ReadersMonitor'
 import { StoryList } from './StoryList'
 import { StoryStudio } from './StoryStudio'
@@ -41,6 +42,7 @@ function AdminShell({ children }) {
     { to: '/admin', label: 'Stories', icon: Library, end: true },
     { to: '/admin/import', label: 'Bulk import', icon: FileUp },
     { to: '/admin/qr-payments', label: 'QR payments', icon: ScanLine, badge: badges.qr },
+    { to: '/admin/sales', label: 'Sales report', icon: BarChart3 },
     { to: '/admin/payment-methods', label: 'Your QR codes', icon: QrCode },
     { to: '/admin/readers', label: 'Readers & payments', icon: UsersRound },
     { to: '/admin/support', label: 'Support inbox', icon: MessagesSquare, badge: badges.support },
@@ -87,6 +89,7 @@ export default function AdminRoutes() {
       <Route path="stories/:id" element={<StoryStudio />} />
       <Route path="import" element={<AdminShell><BulkImport /></AdminShell>} />
       <Route path="qr-payments" element={<AdminShell><QrPayments /></AdminShell>} />
+      <Route path="sales" element={<AdminShell><SalesReport /></AdminShell>} />
       <Route path="payment-methods" element={<AdminShell><PaymentMethods /></AdminShell>} />
       <Route path="readers" element={<AdminShell><ReadersMonitor /></AdminShell>} />
       <Route path="support" element={<AdminShell><SupportInbox /></AdminShell>} />

@@ -118,8 +118,8 @@ def has_full_access(request, story):
     return False
 
 
-def purchases_for(request, story):
-    """Pending or paid purchases this reader made for the story (by account or device)."""
+def purchases_for(request, story=None):
+    """Purchases this reader made (by account or this device), for one story or all of them."""
     q = Q()
     if request.user.is_authenticated:
         q |= Q(user=request.user)
@@ -128,4 +128,7 @@ def purchases_for(request, story):
         q |= Q(grants__device_key=device)
     if not q:
         return Subscription.objects.none()
-    return Subscription.objects.filter(q, story=story).distinct()
+    queryset = Subscription.objects.filter(q)
+    if story is not None:
+        queryset = queryset.filter(story=story)
+    return queryset.distinct()

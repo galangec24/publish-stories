@@ -12,6 +12,7 @@ import {
   MailCheck,
   MailX,
   MessageCircle,
+  ReceiptText,
   Settings as SettingsIcon,
   ScanLine,
   ShoppingCart,
@@ -210,6 +211,9 @@ export function ProfileMenu() {
               <span className={icon}><LayoutDashboard className="h-5 w-5" /></span> Studio &amp; admin
             </button>
           )}
+          <button className={row} onClick={() => go('/purchases')}>
+            <span className={icon}><ReceiptText className="h-5 w-5" /></span> My purchases
+          </button>
           <button className={row} onClick={() => go('/settings')}>
             <span className={icon}><SettingsIcon className="h-5 w-5" /></span> Settings &amp; display
           </button>

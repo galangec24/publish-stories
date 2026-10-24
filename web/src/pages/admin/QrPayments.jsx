@@ -1,4 +1,4 @@
-import { BadgeCheck, Check, Eye, EyeOff, ImagePlus, MonitorSmartphone, Pencil, Plus, QrCode, ReceiptText, Trash2, TriangleAlert, UserRound, X } from 'lucide-react'
+import { BadgeCheck, Check, Search, Eye, EyeOff, ImagePlus, MonitorSmartphone, Pencil, Plus, QrCode, ReceiptText, Trash2, TriangleAlert, UserRound, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -53,7 +53,15 @@ function Proof({ id }) {
 export function QrPayments() {
   const toast = useToast()
   const [status, setStatus] = useState('pending')
-  const list = useAsync(() => api.get('admin/payments/manual/', { status }), [status])
+  const [q, setQ] = useState('')
+  const [search, setSearch] = useState('')
+  const list = useAsync(() => api.get('admin/payments/manual/', { status, q: search }), [status, search])
+
+  // Search as you type (short pause so every keystroke isn't a request).
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(q.trim()), 350)
+    return () => clearTimeout(t)
+  }, [q])
   const [busy, setBusy] = useState(null)
 
   useEffect(() => onLiveEvent('payments.changed', () => list.reload()), [list.reload]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -100,7 +108,16 @@ export function QrPayments() {
         </li>
       </ol>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="relative w-full sm:w-72">
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted" />
+          <input
+            className="input !py-2 !pl-9"
+            placeholder="Search reference, name, email, story, code…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
         {[
           ['pending', `To check${list.data ? ` (${list.data.pending_count})` : ''}`],
           ['paid', 'Confirmed'],
@@ -116,7 +133,9 @@ export function QrPayments() {
       {list.loading && !list.data ? (
         <Spinner />
       ) : !rows.length ? (
-        <p className="py-16 text-center text-muted">{status === 'pending' ? 'Nothing to check right now.' : 'No payments here yet.'}</p>
+        <p className="py-16 text-center text-muted">
+          {search ? `No payments match “${search}”.` : status === 'pending' ? 'Nothing to check right now.' : 'No payments here yet.'}
+        </p>
       ) : (
         <div className="mt-5 space-y-3">
           {rows.map((p) => (
