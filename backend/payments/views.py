@@ -17,6 +17,7 @@ from notifications.realtime import push_admins
 from notifications.service import first_name, notify, notify_admins
 
 from .access import add_device, device_key, has_full_access, network_key
+from .manual import instant_checkout_allowed
 from .models import PaymentLog, Subscription, new_access_code
 from .paymongo import PayMongoError, create_checkout_session, verify_signature
 
@@ -62,9 +63,12 @@ class SubscribeView(APIView):
         story = get_object_or_404(Story, pk=story_id, status=Story.Status.PUBLISHED)
         if story.is_free:
             return Response({"detail": "This story is free to read."}, status=400)
-        if has_full_access(request, story):
-            return Response({"detail": "You've already unlocked this story."}, status=400)
+        if not instant_checkout_allowed(request):
+            return Response({"detail": "Instant payment isn't available. Please use GCash or bank transfer."}, status=403)
         user = request.user if request.user.is_authenticated else None
+        testing = user is not None and user.is_admin  # admins can always read; this is a test run
+        if not testing and has_full_access(request, story):
+            return Response({"detail": "You've already unlocked this story."}, status=400)
 
         with transaction.atomic():
             subscription = Subscription(user=user, story=story, amount=story.price, provider=Subscription.Provider.PAYMONGO)

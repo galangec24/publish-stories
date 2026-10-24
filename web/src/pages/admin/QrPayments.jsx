@@ -365,7 +365,36 @@ function InstantStatus() {
       : !webhook
         ? ['bg-amber-500/15 text-amber-300', `Instant QR Ph (PayMongo): ${mode} key set, but the webhook secret is missing, so it stays hidden from readers.`]
         : mode === 'test'
-          ? ['bg-sky-500/15 text-sky-300', 'Instant QR Ph (PayMongo): TEST mode. Readers see it, but no real money moves. Switch to live keys when ready.']
-          : ['bg-emerald-500/15 text-emerald-300', 'Instant QR Ph (PayMongo): LIVE. Payments unlock stories automatically.']
-  return <p className={`mt-3 rounded-xl px-3 py-2 text-sm ${tone}`}>{text}</p>
+          ? ['bg-sky-500/15 text-sky-300', 'Instant QR Ph (PayMongo): TEST mode. Hidden from readers (anyone could fake a payment); only admins can try it. Switch to live keys when ready.']
+          : ['bg-emerald-500/15 text-emerald-300', 'Instant QR Ph (PayMongo): LIVE. Readers see it, and payments unlock stories automatically.']
+  return (
+    <div className={`mt-3 flex flex-wrap items-center gap-3 rounded-xl px-3 py-2 text-sm ${tone}`}>
+      <span className="min-w-0 flex-1">{text}</span>
+      {mode === 'test' && webhook && <TestPaymentButton />}
+    </div>
+  )
+}
+
+/** Runs PayMongo's test checkout on a paid story; it comes back to the story and is logged under Payment logs. */
+function TestPaymentButton() {
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+  async function run() {
+    setBusy(true)
+    try {
+      const { results } = await api.get('admin/stories/', { status: 'published' })
+      const story = results.find((s) => !s.is_free)
+      if (!story) throw new Error('Publish a paid story first (price ₱20 or more).')
+      const { checkout_url } = await api.post(`subscribe/${story.id}/`)
+      window.location.assign(checkout_url)
+    } catch (e) {
+      setBusy(false)
+      toast(e, 'error')
+    }
+  }
+  return (
+    <button className="btn-ghost !py-1.5 text-sm" onClick={run} disabled={busy}>
+      {busy ? 'Opening…' : 'Try a test payment'}
+    </button>
+  )
 }

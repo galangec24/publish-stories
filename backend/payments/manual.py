@@ -101,6 +101,12 @@ class AdminPurchaseSerializer(PurchaseSerializer):
         return hasattr(purchase, "proof")
 
 
+def instant_checkout_allowed(request):
+    if not (settings.PAYMONGO_SECRET_KEY and settings.PAYMONGO_WEBHOOK_SECRET):
+        return False
+    return settings.PAYMONGO_LIVE_MODE or bool(request.user.is_authenticated and request.user.is_admin)
+
+
 class PaymentMethodListView(APIView):
     """GET /api/payment-methods/ — QR codes readers can pay with."""
 
@@ -111,7 +117,8 @@ class PaymentMethodListView(APIView):
         return Response(
             {
                 "methods": PaymentMethodSerializer(methods, many=True).data,
-                "online_checkout": bool(settings.PAYMONGO_SECRET_KEY and settings.PAYMONGO_WEBHOOK_SECRET),
+                # Test mode lets anyone fake a payment, so only admins get it until the keys are live.
+                "online_checkout": instant_checkout_allowed(request),
                 # Not secret; lets the admin confirm the keys without anyone looking at them.
                 "online_checkout_mode": ("live" if settings.PAYMONGO_LIVE_MODE else "test") if settings.PAYMONGO_SECRET_KEY else "off",
                 "online_checkout_webhook": bool(settings.PAYMONGO_WEBHOOK_SECRET),

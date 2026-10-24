@@ -18,10 +18,10 @@ SECRET = "whsk_test"
 def signed_headers(body, secret=SECRET):
     ts = str(int(time.time()))
     sig = hmac.new(secret.encode(), f"{ts}.".encode() + body, hashlib.sha256).hexdigest()
-    return {"HTTP_PAYMONGO_SIGNATURE": f"t={ts},te={sig},li="}
+    return {"HTTP_PAYMONGO_SIGNATURE": f"t={ts},te=,li={sig}"}
 
 
-@override_settings(PAYMONGO_WEBHOOK_SECRET=SECRET, PAYMONGO_LIVE_MODE=False)
+@override_settings(PAYMONGO_WEBHOOK_SECRET=SECRET, PAYMONGO_SECRET_KEY="sk_live_x", PAYMONGO_LIVE_MODE=True)
 class PaymentTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(email="r@example.com", password="x", email_verified=True)
@@ -67,6 +67,15 @@ class PaymentTests(APITestCase):
         self.assertEqual(self.webhook(body, signed_headers(body)).data["status"], "paid")
         self.assertTrue(self.client.get(f"/api/stories/{self.story.slug}/", **guest).data["has_access"])
         self.assertFalse(self.client.get(f"/api/stories/{self.story.slug}/", HTTP_X_VIEWER_ID="someone-else-0002-bbbb").data["has_access"])
+
+    @override_settings(PAYMONGO_LIVE_MODE=False, PAYMONGO_SECRET_KEY="sk_test_x")
+    def test_test_mode_is_admin_only(self):
+        self.assertEqual(self.client.post(f"/api/subscribe/{self.story.id}/").status_code, 403)
+        self.assertFalse(self.client.get("/api/payment-methods/").data["online_checkout"])
+        admin = User.objects.create_user(email="admin@example.com", password="x", is_admin=True)
+        self.client.force_authenticate(admin)
+        self.assertTrue(self.client.get("/api/payment-methods/").data["online_checkout"])
+        self.assertEqual(self.subscribe().status_code, 201)
 
     def test_bad_signature_rejected(self):
         self.subscribe()
