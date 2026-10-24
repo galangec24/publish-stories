@@ -83,6 +83,7 @@ export function StoryStudio() {
   const [tab, setTab] = useState('home')
   const [navOpen, setNavOpen] = useState(() => window.innerWidth >= 900)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [publishOpen, setPublishOpen] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [headings, setHeadings] = useState([])
   const [words, setWords] = useState(0)
@@ -334,14 +335,16 @@ export function StoryStudio() {
   }
 
   // ------------------------------------------------------------------ story
-  async function publish(on) {
-    if (!(await flush())) return
+  async function publish(on, body) {
+    if (!(await flush())) return false
     try {
-      const data = await api.post(`admin/stories/${id}/${on ? 'publish' : 'unpublish'}/`)
+      const data = await api.post(`admin/stories/${id}/${on ? 'publish' : 'unpublish'}/`, body)
       setStory(data)
       toast(on ? 'Published. Readers can see it now.' : 'Moved back to drafts.')
+      return true
     } catch (e) {
-      toast(e, 'error')
+      toast(e instanceof ApiError && e.body?.price ? e.body.price[0] : e, 'error')
+      return false
     }
   }
 
@@ -431,7 +434,7 @@ export function StoryStudio() {
     window.alert(
       `This chapter: ${wordCount(text)} words, ${text.replace(/\n/g, '').length} characters, ${paragraphs} paragraphs\n` +
         `Whole story (last saved): ${total} words in ${chapters.length} chapters\n` +
-        `Readers who haven't paid see the first ${story.preview_page_count} paragraphs.`,
+        `Readers who haven't paid can read the first ${story.free_chapters} chapter${story.free_chapters === 1 ? '' : 's'}.`,
     )
   }
 
@@ -466,7 +469,7 @@ export function StoryStudio() {
             Unpublish
           </button>
         ) : (
-          <button className="btn-primary !py-1.5" onClick={() => publish(true)}>
+          <button className="btn-primary !py-1.5" onClick={() => setPublishOpen(true)}>
             Publish
           </button>
         )}
@@ -752,6 +755,15 @@ export function StoryStudio() {
         />
       )}
 
+      {publishOpen && story && (
+        <PublishModal
+          story={story}
+          chapterCount={chapters.length}
+          onCancel={() => setPublishOpen(false)}
+          onPublish={async (body) => (await publish(true, body)) && setPublishOpen(false)}
+        />
+      )}
+
       {conflict && (
         <Modal title="Chapter changed elsewhere">
           <p className="text-sm text-muted">
@@ -925,6 +937,60 @@ function Modal({ title, children }) {
   )
 }
 
+/** Last check before readers see the story: the price can still change until someone pays. */
+function PublishModal({ story, chapterCount, onCancel, onPublish }) {
+  const [price, setPrice] = useState(String(Number(story.price)))
+  const [busy, setBusy] = useState(false)
+  const value = Number(price || 0)
+  const invalid = value < 0 || (value > 0 && value < 20)
+  const freeByColumn = story.column?.is_public
+  return (
+    <Modal title={`Publish “${story.title}”?`}>
+      <div className="space-y-4 text-sm">
+        {freeByColumn ? (
+          <p className="text-muted">It&apos;s in the public column “{story.column.title}”, so it&apos;s free for everyone.</p>
+        ) : (
+          <Field
+            label="Price (₱)"
+            hint={story.price_locked ? 'Locked: readers have already paid or sent a payment at this price.' : '0 = free · at least ₱20 for paid stories. You can change it until the first payment.'}
+          >
+            <input
+              className="input"
+              type="number"
+              min="0"
+              step="1"
+              value={price}
+              disabled={story.price_locked}
+              onChange={(e) => setPrice(e.target.value)}
+              autoFocus
+            />
+          </Field>
+        )}
+        {!freeByColumn && value > 0 && (
+          <p className="text-muted">
+            Free to read: first {story.free_chapters} of {chapterCount} chapter{chapterCount === 1 ? '' : 's'}. Change this in Story settings.
+          </p>
+        )}
+        {invalid && <p className="text-xs text-rose-400">Use 0 (free) or at least ₱20.</p>}
+        <div className="flex justify-end gap-2">
+          <button className="btn-ghost" onClick={onCancel}>Cancel</button>
+          <button
+            className="btn-primary"
+            disabled={busy || invalid}
+            onClick={async () => {
+              setBusy(true)
+              await onPublish(story.price_locked || freeByColumn ? undefined : { price: value.toFixed(2) })
+              setBusy(false)
+            }}
+          >
+            {busy ? 'Publishing…' : 'Publish now'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 function PromptModal({ title, label, value, onDone }) {
   const [text, setText] = useState(value)
   return (
@@ -953,7 +1019,7 @@ function SettingsDrawer({ story, genres, columns, onClose, onSave, onUploadCover
     author_name: story.author_name,
     synopsis: story.synopsis,
     price: story.price,
-    preview_page_count: story.preview_page_count,
+    free_chapters: story.free_chapters,
     column_id: story.column?.id ?? '',
     font_family: story.font_family || 'literata',
     font_size: story.font_size || 18,
@@ -1004,11 +1070,11 @@ function SettingsDrawer({ story, genres, columns, onClose, onSave, onUploadCover
             </select>
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Price (₱)" hint="0 = free · min ₱20">
-              <input className="input" type="number" min="0" step="0.01" value={form.price} onChange={set('price')} />
+            <Field label="Price (₱)" hint={story.price_locked ? 'locked: readers have paid' : '0 = free · min ₱20'}>
+              <input className="input" type="number" min="0" step="0.01" value={form.price} onChange={set('price')} disabled={story.price_locked} />
             </Field>
-            <Field label="Free preview" hint="paragraphs">
-              <input className="input" type="number" min="0" value={form.preview_page_count} onChange={set('preview_page_count')} />
+            <Field label="Free chapters" hint={`of ${story.chapters?.length ?? 0} · 0 = none`}>
+              <input className="input" type="number" min="0" max="50" value={form.free_chapters} onChange={set('free_chapters')} />
             </Field>
           </div>
           <TypographyPicker
@@ -1025,7 +1091,7 @@ function SettingsDrawer({ story, genres, columns, onClose, onSave, onUploadCover
               await onSave({
                 ...form,
                 price: form.price === '' ? '0' : String(form.price),
-                preview_page_count: Number(form.preview_page_count) || 0,
+                free_chapters: Number(form.free_chapters) || 0,
                 column_id: form.column_id === '' ? null : Number(form.column_id),
                 font_size: Number(form.font_size),
                 genre_ids: [...genreIds],

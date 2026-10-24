@@ -1,5 +1,6 @@
+import { ArrowUpRight, BookOpen, Newspaper } from 'lucide-react'
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { AboutMe } from '../components/AboutMe'
 import { AuthorBlog } from '../components/AuthorBlog'
@@ -8,7 +9,8 @@ import { Spinner } from '../components/ui'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { formatCount } from '../lib/readingMode'
-import { useAsync } from '../lib/useAsync'
+import { DEFAULT_ABOUT } from '../lib/aboutDefaults'
+import { useAsync, useCachedAsync } from '../lib/useAsync'
 
 const Hero3D = lazy(() => import('../components/Hero3D'))
 
@@ -18,8 +20,11 @@ function prefersReducedMotion() {
 
 export function Home() {
   const { user } = useAuth()
-  const home = useAsync(() => api.get('home/'), [user?.id, user?.preferred_genres?.length])
-  const about = useAsync(() => api.get('about/'), [])
+  const home = useCachedAsync(`cache:home:${user?.id || 'guest'}`, () => api.get('home/'), [user?.preferred_genres?.length])
+  const about = useCachedAsync('cache:about', () => api.get('about/'), [], DEFAULT_ABOUT)
+  const [params, setParams] = useSearchParams()
+  const tab = params.get('tab') === 'columns' ? 'columns' : 'stories'
+  const columns = useCachedAsync('cache:columns', () => (tab === 'columns' ? api.get('columns/') : Promise.resolve(undefined)), [tab])
   const [genreFilter, setGenreFilter] = useState(new Set())
   const [query, setQuery] = useState('')
   const [debounced, setDebounced] = useState('')
@@ -107,6 +112,24 @@ export function Home() {
 
       <section id="browse" className="sticky top-16 z-30 -mx-4 mt-6 border-y border-line/60 bg-bg/80 px-4 py-3 backdrop-blur-xl">
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="flex shrink-0 gap-1 rounded-xl border border-line bg-surface/70 p-1" role="tablist">
+            {[
+              ['stories', 'Stories', BookOpen],
+              ['columns', 'Columns', Newspaper],
+            ].map(([id, label, Icon]) => (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={tab === id}
+                onClick={() => setParams(id === 'stories' ? {} : { tab: id }, { replace: true })}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                  tab === id ? 'bg-brand text-white shadow' : 'text-muted hover:text-ink'
+                }`}
+              >
+                <Icon className="h-4 w-4" /> {label}
+              </button>
+            ))}
+          </div>
           <input
             className="input md:max-w-xs"
             placeholder="Search titles, authors…"
@@ -135,12 +158,17 @@ export function Home() {
         </div>
       </section>
 
-      {home.loading && !data ? (
-        <Spinner />
-      ) : home.error ? (
-        <p className="py-16 text-center text-muted">Couldn&apos;t reach the server. {home.error.message}</p>
+      {!data && home.loading ? (
+        <div className="py-10 text-center text-sm text-muted">
+          <Spinner className="!pb-4" />
+          <p>Opening the library… the first visit after a quiet spell can take up to a minute.</p>
+        </div>
+      ) : !data ? (
+        <p className="py-16 text-center text-muted">Couldn&apos;t reach the server. {home.error?.message}</p>
       ) : filtering ? (
         <Results stories={filtered.data} loading={filtered.loading} />
+      ) : tab === 'columns' ? (
+        <ColumnsTab columns={columns.data} loading={columns.loading} />
       ) : (
         <>
           {user && (
@@ -150,9 +178,6 @@ export function Home() {
               stories={data.for_you}
             />
           )}
-          {data.public_columns.map((c) => (
-            <Shelf key={c.id} title={c.title} subtitle="Free to read, always" stories={c.stories} link={c.url} />
-          ))}
           <Shelf title="Most read" subtitle="By views" stories={data.popular} />
           <Shelf title="New & updated" stories={data.latest} />
           <Shelf title="Free reads" stories={data.free} />
@@ -160,7 +185,9 @@ export function Home() {
             <Shelf key={row.genre.id} title={row.genre.name} stories={row.stories} />
           ))}
           {!data.latest.length && (
-            <p className="py-16 text-center text-muted">No stories published yet. Check back soon.</p>
+            <p className="py-16 text-center text-muted">
+              {data.has_columns ? 'Read her latest pieces in the Columns tab.' : 'No stories published yet. Check back soon.'}
+            </p>
           )}
         </>
       )}
@@ -178,6 +205,42 @@ function Results({ stories, loading }) {
     <div className="mt-8 grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
       {stories.map((s) => (
         <Book3D key={s.id} story={s} />
+      ))}
+    </div>
+  )
+}
+
+function ColumnsTab({ columns, loading }) {
+  if (!columns) return loading ? <Spinner /> : null
+  if (!columns.length) return <p className="py-16 text-center text-muted">No columns published yet.</p>
+  return (
+    <div className="mt-6 space-y-6">
+      {columns.map((c) => (
+        <section key={c.id} className="card p-5 sm:p-6">
+          <div className="flex flex-wrap items-start gap-3">
+            <span className="tile-3d grid h-11 w-11 shrink-0 place-items-center rounded-2xl">
+              <Newspaper className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-display text-2xl leading-tight">{c.title}</h2>
+              <p className="text-xs tracking-wide text-muted uppercase">
+                {c.story_count} piece{c.story_count === 1 ? '' : 's'}
+                {c.is_public && <span className="ml-2 text-emerald-400">Free to read</span>}
+              </p>
+              {c.description && <p className="mt-2 max-w-2xl text-sm text-muted">{c.description}</p>}
+            </div>
+            {c.url && (
+              <a href={c.url} target="_blank" rel="noreferrer noopener" className="btn-ghost !py-1.5 text-sm">
+                Visit column <ArrowUpRight className="h-4 w-4" />
+              </a>
+            )}
+          </div>
+          <div className="-mx-2 mt-4 flex gap-6 overflow-x-auto px-4 pt-4 pb-6 [scrollbar-width:thin]">
+            {c.stories.map((s) => (
+              <Book3D key={s.id} story={s} />
+            ))}
+          </div>
+        </section>
       ))}
     </div>
   )

@@ -39,10 +39,18 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
           {
-            // Cover images only. Story text is never cached: it is paywalled per user.
-            urlPattern: ({ request }) => request.destination === 'image',
+            // Uploaded pictures have unique ids and never change, so the cached copy is always right.
+            // Story text is never cached: it is paywalled per user.
+            urlPattern: ({ request, url }) => request.destination === 'image' && url.pathname.startsWith('/api/media/'),
             handler: 'CacheFirst',
             options: { cacheName: 'images', expiration: { maxEntries: 200, maxAgeSeconds: 30 * 24 * 3600 } },
+          },
+          {
+            // Anything else (site photos, outside covers) can be replaced under the same name: show the
+            // cached copy, then refresh it in the background.
+            urlPattern: ({ request }) => request.destination === 'image',
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'site-images', expiration: { maxEntries: 100, maxAgeSeconds: 7 * 24 * 3600 } },
           },
         ],
       },

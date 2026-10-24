@@ -196,7 +196,9 @@ class AdminPendingCheckoutsView(APIView):
     permission_classes = [IsAdmin]
 
     def get(self, request):
-        pending = Subscription.objects.filter(status=Subscription.Status.PENDING).select_related("user", "story")
+        pending = Subscription.objects.filter(
+            status=Subscription.Status.PENDING, provider=Subscription.Provider.PAYMONGO
+        ).select_related("user", "story")
         return Response(
             {
                 "count": pending.count(),

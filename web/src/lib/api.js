@@ -154,4 +154,11 @@ export const api = {
   delete: (path) => send('DELETE', path),
   /** multipart/form-data upload; `form` is a FormData. */
   upload: (path, form, method = 'POST') => send(method, path, { form }),
+  /** Signed-in download (e.g. admin-only images) → an object URL for <img src>. */
+  blobUrl: async (path, retry = true) => {
+    const response = await fetch(url(path), { headers: store.access ? { Authorization: `Bearer ${store.access}` } : {} })
+    if (response.status === 401 && retry && (await refreshAccess())) return api.blobUrl(path, false)
+    if (!response.ok) throw new ApiError(response.status, null)
+    return URL.createObjectURL(await response.blob())
+  },
 }

@@ -23,7 +23,7 @@ export function BulkImport() {
   const [batchGenres, setBatchGenres] = useState(new Set())
   const [columnId, setColumnId] = useState('')
   const [price, setPrice] = useState('0')
-  const [preview, setPreview] = useState('3')
+  const [freeChapters, setFreeChapters] = useState('1')
   const [publish, setPublish] = useState(false)
   const [createMissing, setCreateMissing] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -48,7 +48,7 @@ export function BulkImport() {
     form.append('genre_ids', [...batchGenres].join(','))
     if (columnId) form.append('column_id', columnId)
     form.append('price', price || '0')
-    form.append('preview_page_count', preview || '3')
+    form.append('free_chapters', freeChapters || '0')
     form.append('status', publish ? 'published' : 'draft')
     form.append('create_missing_genres', String(createMissing))
     form.append(
@@ -105,8 +105,8 @@ export function BulkImport() {
           <Field label="Price (₱)" hint="0 = free · min ₱20">
             <input className="input" type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
           </Field>
-          <Field label="Preview paragraphs">
-            <input className="input" type="number" min="0" value={preview} onChange={(e) => setPreview(e.target.value)} />
+          <Field label="Free chapters" hint="0 = none">
+            <input className="input" type="number" min="0" max="50" value={freeChapters} onChange={(e) => setFreeChapters(e.target.value)} />
           </Field>
         </div>
         <label className="flex items-center gap-3 text-sm">

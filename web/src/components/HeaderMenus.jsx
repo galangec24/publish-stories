@@ -13,6 +13,7 @@ import {
   MailX,
   MessageCircle,
   Settings as SettingsIcon,
+  ScanLine,
   ShoppingCart,
   UserRound,
 } from 'lucide-react'
@@ -26,6 +27,8 @@ import { useLive } from '../realtime/LiveProvider'
 const KIND_ICON = {
   payment_paid: [BadgeCheck, 'bg-emerald-500'],
   checkout_started: [ShoppingCart, 'bg-amber-500'],
+  payment_submitted: [ScanLine, 'bg-amber-500'],
+  payment_rejected: [ShoppingCart, 'bg-rose-500'],
   new_story: [BookOpen, 'bg-brand'],
   support_message: [MessageCircle, 'bg-sky-500'],
   support_reply: [MessageCircle, 'bg-sky-500'],

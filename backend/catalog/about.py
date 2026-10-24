@@ -25,7 +25,7 @@ DEFAULTS = {
         "Her public work reflects a combination of education communication, journalism, mentoring, and "
         "storytelling, particularly in highlighting the people and communities behind public education in Davao Region."
     ),
-    "photo_url": "/about/maria-gemima-valderrama.webp",
+    "photo_url": "/about/maria-gemima-valderrama-v2.webp",
     "roles": [
         {
             "icon": "school",

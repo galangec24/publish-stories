@@ -5,6 +5,9 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from payments.access import purchases_for
+from payments.manual import PurchaseSerializer
+
 from .analytics import platform_stats, record_view
 from .models import Chapter, Column, Genre, Story
 from .paywall import has_full_access, reader_chapters
@@ -22,12 +25,17 @@ def published_stories():
 
 
 def filter_stories(queryset, params):
-    """Shared filters: ?genre=slug (repeatable or comma separated), ?column=slug, ?q=text, ?free=true."""
+    """Shared filters: ?genre=slug (repeatable or comma separated), ?column=slug|none|any, ?q=text, ?free=true."""
     genres = [g for value in params.getlist("genre") for g in value.split(",") if g]
     if genres:
         queryset = queryset.filter(genres__slug__in=genres).distinct()
-    if params.get("column"):
-        queryset = queryset.filter(column__slug=params["column"])
+    column = params.get("column")
+    if column == "none":
+        queryset = queryset.filter(column__isnull=True)
+    elif column == "any":
+        queryset = queryset.filter(column__isnull=False)
+    elif column:
+        queryset = queryset.filter(column__slug=column)
     if params.get("q"):
         q = params["q"].strip()
         queryset = queryset.filter(Q(title__icontains=q) | Q(synopsis__icontains=q) | Q(author_name__icontains=q))
@@ -47,11 +55,28 @@ class GenreListView(generics.ListAPIView):
         return Genre.objects.filter(is_active=True)
 
 
-class ColumnListView(generics.ListAPIView):
-    serializer_class = ColumnSerializer
+class ColumnListView(APIView):
+    """GET /api/columns/ — the Columns tab: every column with published pieces, newest pieces first."""
+
     permission_classes = [permissions.AllowAny]
-    pagination_class = None
-    queryset = Column.objects.all()
+
+    def get(self, request):
+        stories = published_stories().order_by("-published_at")
+        columns = Column.objects.annotate(
+            story_count=Count("stories", filter=Q(stories__status=Story.Status.PUBLISHED))
+        ).filter(story_count__gt=0).order_by("title")
+        return Response(
+            [
+                {
+                    **ColumnSerializer(column).data,
+                    "story_count": column.story_count,
+                    "stories": StoryListSerializer(
+                        stories.filter(column=column)[:SHELF_SIZE], many=True, context={"request": request}
+                    ).data,
+                }
+                for column in columns
+            ]
+        )
 
 
 class ColumnDetailView(APIView):
@@ -86,10 +111,14 @@ class StoryDetailView(APIView):
         if not (request.user.is_authenticated and request.user.is_admin):
             queryset = queryset.filter(status=Story.Status.PUBLISHED)
         story = get_object_or_404(queryset, slug=slug)
-        full_access = has_full_access(request.user, story)
+        full_access = has_full_access(request, story)
         chapters, locked = reader_chapters(story, full_access)
         data = StoryListSerializer(story, context={"request": request}).data
-        data.update(chapters=chapters, locked=locked, has_access=full_access)
+        purchase = None
+        if locked:  # e.g. a QR payment the author hasn't confirmed yet
+            latest = purchases_for(request, story).select_related("story", "method").order_by("-created_at").first()
+            purchase = PurchaseSerializer(latest).data if latest else None
+        data.update(chapters=chapters, locked=locked, has_access=full_access, purchase=purchase)
         return Response(data)
 
 
@@ -121,16 +150,11 @@ class HomeView(APIView):
 
     def get(self, request):
         ctx = {"request": request}
-        stories = published_stories()
+        # Column pieces live in their own tab (GET /api/columns/); these shelves are stories and books.
+        stories = published_stories().filter(column__isnull=True)
 
         def shelf(queryset):
             return StoryListSerializer(queryset[:SHELF_SIZE], many=True, context=ctx).data
-
-        public_columns = []
-        for column in Column.objects.filter(is_public=True):
-            column_stories = stories.filter(column=column)
-            if column_stories.exists():
-                public_columns.append({**ColumnSerializer(column).data, "stories": shelf(column_stories)})
 
         for_you = []
         user = request.user
@@ -140,7 +164,7 @@ class HomeView(APIView):
                 for_you = shelf(stories.filter(genres__in=preferred).distinct())
 
         genres = Genre.objects.filter(is_active=True).annotate(
-            published=Count("stories", filter=Q(stories__status=Story.Status.PUBLISHED))
+            published=Count("stories", filter=Q(stories__status=Story.Status.PUBLISHED, stories__column__isnull=True))
         ).order_by("sort_order", "name")  # Meta.ordering is dropped from GROUP BY queries
         by_genre = [
             {"genre": GenreSerializer(genre).data, "stories": shelf(stories.filter(genres=genre))}
@@ -151,7 +175,7 @@ class HomeView(APIView):
         return Response(
             {
                 "genres": GenreSerializer(genres, many=True).data,
-                "public_columns": public_columns,
+                "has_columns": Column.objects.filter(stories__status=Story.Status.PUBLISHED).exists(),
                 "for_you": for_you,
                 "latest": shelf(stories),
                 "free": shelf(stories.filter(Q(price__lte=0) | Q(column__is_public=True))),

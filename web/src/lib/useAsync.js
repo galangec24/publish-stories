@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 /** Runs `fn` on mount and whenever `deps` change. Returns { data, error, loading, reload, setData }. */
 export function useAsync(fn, deps = []) {
@@ -28,4 +28,34 @@ export function useAsync(fn, deps = []) {
   }, [])
 
   return { ...state, reload, setData }
+}
+
+function readCache(key) {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Like useAsync, but starts from the last good response saved under `key` (or
+ * `fallback`), so the page renders instantly while a sleeping server wakes up.
+ */
+export function useCachedAsync(key, fn, deps = [], fallback = undefined) {
+  const result = useAsync(
+    () =>
+      fn().then((data) => {
+        try {
+          localStorage.setItem(key, JSON.stringify(data))
+        } catch {
+          /* storage full or blocked: just don't cache */
+        }
+        return data
+      }),
+    [key, ...deps],
+  )
+  const cached = useMemo(() => readCache(key) ?? fallback, [key]) // eslint-disable-line react-hooks/exhaustive-deps
+  return { ...result, data: result.data ?? cached }
 }

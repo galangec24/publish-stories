@@ -186,6 +186,8 @@ REST_FRAMEWORK = {
         "translate": "600/hour",
         "chat": "60/min",
         "comment": "10/min",
+        "payment_submit": "6/hour",
+        "access_claim": "20/hour",
     },
 }
 
@@ -228,6 +230,11 @@ PAYMONGO_SECRET_KEY = os.environ.get("PAYMONGO_SECRET_KEY", "")
 PAYMONGO_WEBHOOK_SECRET = os.environ.get("PAYMONGO_WEBHOOK_SECRET", "")
 PAYMONGO_LIVE_MODE = env_bool("PAYMONGO_LIVE_MODE", False)
 PAYMONGO_WEBHOOK_TOLERANCE_SECONDS = 300
+
+# Paid stories read without an account (see payments/access.py).
+ACCESS_MAX_DEVICES = int(os.environ.get("ACCESS_MAX_DEVICES", "5"))
+ACCESS_NETWORK_DAYS = int(os.environ.get("ACCESS_NETWORK_DAYS", "30"))
+PAYMENT_PROOF_MAX_BYTES = 5 * 1024 * 1024
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

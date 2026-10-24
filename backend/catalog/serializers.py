@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import serializers
 
 from . import delta
@@ -17,8 +18,10 @@ class GenreSerializer(serializers.ModelSerializer):
 class ColumnSerializer(serializers.ModelSerializer):
     class Meta:
         model = Column
-        fields = ["id", "title", "slug", "description", "is_public", "url", "created_at"]
-        read_only_fields = ["slug", "created_at"]
+        fields = ["id", "title", "slug", "description", "is_public", "url", "created_at", "story_count"]
+        read_only_fields = ["slug", "created_at", "story_count"]
+
+    story_count = serializers.IntegerField(read_only=True, required=False)  # admin list only
 
 
 class ColumnMiniSerializer(serializers.ModelSerializer):
@@ -46,7 +49,7 @@ class StoryListSerializer(serializers.ModelSerializer):
             "genres",
             "price",
             "is_free",
-            "preview_page_count",
+            "free_chapters",
             "font_family",
             "font_size",
             "title_font",
@@ -97,9 +100,11 @@ class AdminStorySerializer(StoryListSerializer):
         source="genres", queryset=Genre.objects.all(), many=True, required=False
     )
     chapters = ChapterSummarySerializer(many=True, read_only=True)
+    price_locked = serializers.SerializerMethodField()
 
     class Meta(StoryListSerializer.Meta):
         fields = StoryListSerializer.Meta.fields + [
+            "price_locked",
             "column_id",
             "genre_ids",
             "chapters",
@@ -120,7 +125,24 @@ class AdminStorySerializer(StoryListSerializer):
         if 0 < value < 20:
             # PayMongo's minimum charge is PHP 20.00.
             raise serializers.ValidationError("Paid stories must cost at least PHP 20.00 (or 0 for free).")
+        story = getattr(self, "instance", None)
+        if isinstance(story, Story) and value != story.price and price_locked(story):
+            raise serializers.ValidationError(
+                "Readers have already paid (or sent a payment) at this price, so it can't change any more."
+            )
         return value
+
+    def get_price_locked(self, story):
+        return price_locked(story)
+
+
+def price_locked(story):
+    """The price is fixed once anyone has paid or sent a QR payment for the story."""
+    from payments.models import Subscription
+
+    return story.subscriptions.filter(
+        Q(status=Subscription.Status.PAID) | Q(status=Subscription.Status.PENDING, provider=Subscription.Provider.MANUAL)
+    ).exists()
 
 
 class ImportOptionsSerializer(serializers.Serializer):
@@ -132,7 +154,7 @@ class ImportOptionsSerializer(serializers.Serializer):
     genre_ids = serializers.PrimaryKeyRelatedField(queryset=Genre.objects.all(), many=True, required=False)
     column_id = serializers.PrimaryKeyRelatedField(queryset=Column.objects.all(), allow_null=True, required=False)
     price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
-    preview_page_count = serializers.IntegerField(min_value=0, required=False)
+    free_chapters = serializers.IntegerField(min_value=0, max_value=50, required=False)
     status = serializers.ChoiceField(choices=Story.Status.choices, required=False)
 
     def validate_price(self, value):

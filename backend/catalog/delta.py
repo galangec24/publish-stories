@@ -64,53 +64,6 @@ def word_count(ops):
     return len(plain_text(ops).split())
 
 
-def _has_content(ops, start):
-    for op in ops[start:]:
-        insert = op.get("insert")
-        if not isinstance(insert, str) or insert.strip():
-            return True
-    return False
-
-
-def truncate_paragraphs(ops, limit):
-    """Keep the first `limit` non-empty lines of a Delta.
-
-    Returns (kept_ops, paragraphs_used, truncated) where `truncated` is True
-    when meaningful content was cut off.
-    """
-    if limit <= 0:
-        return [], 0, _has_content(ops, 0)
-
-    kept, count, line_has_text = [], 0, False
-    for index, op in enumerate(ops):
-        insert, attrs = op.get("insert"), op.get("attributes")
-        if not isinstance(insert, str):
-            kept.append(op)
-            line_has_text = True
-            continue
-        pieces = insert.split("\n")
-        buffer = []
-        for i, piece in enumerate(pieces):
-            if piece:
-                buffer.append(piece)
-                if piece.strip():
-                    line_has_text = True
-            if i == len(pieces) - 1:
-                break
-            buffer.append("\n")
-            if line_has_text:
-                count += 1
-            line_has_text = False
-            if count >= limit:
-                kept.append(_op("".join(buffer), attrs))
-                rest = "\n".join(pieces[i + 1 :])
-                truncated = bool(rest.strip()) or _has_content(ops, index + 1)
-                return kept, count, truncated
-        if buffer:
-            kept.append(_op("".join(buffer), attrs))
-    return normalize(kept), count, False
-
-
 def paragraphs_to_ops(paragraphs):
     """Build a Delta from [(runs, block_attrs)] where runs is [(text, inline_attrs)].
 

@@ -110,3 +110,25 @@ class SeedGenresTests(APITestCase):
         call_command("seed_genres", stdout=io.StringIO())  # e.g. the next server restart
         self.assertEqual(Genre.objects.count(), 12)
         self.assertFalse(Genre.objects.filter(name="Horror").exists())
+
+
+class ColumnsTabTests(APITestCase):
+    def test_columns_tab_and_column_filters(self):
+        column = Column.objects.create(title="Sunday Reflections", url="https://example.com/col")
+        Column.objects.create(title="Empty")
+        piece = Story.objects.create(title="On Teachers", status="published", column=column)
+        Story.objects.create(title="Draft piece", status="draft", column=column)
+        novel = Story.objects.create(title="A Novel", status="published")
+
+        tab = self.client.get("/api/columns/").data
+        self.assertEqual([c["title"] for c in tab], ["Sunday Reflections"])
+        self.assertEqual(tab[0]["story_count"], 1)
+        self.assertEqual([s["slug"] for s in tab[0]["stories"]], [piece.slug])
+
+        self.assertEqual([s["slug"] for s in self.client.get("/api/stories/?column=none").data["results"]], [novel.slug])
+        admin = User.objects.create_user(email="admin@example.com", password="x", is_admin=True)
+        self.client.force_authenticate(admin)
+        listed = self.client.get("/api/admin/stories/?column=any").data["results"]
+        self.assertEqual(sorted(s["title"] for s in listed), ["Draft piece", "On Teachers"])
+        counts = {c["title"]: c["story_count"] for c in self.client.get("/api/admin/columns/").data}
+        self.assertEqual(counts, {"Empty": 0, "Sunday Reflections": 2})

@@ -18,19 +18,6 @@ def doc(*lines):
 
 
 class DeltaTests(TestCase):
-    def test_truncate_counts_only_non_empty_lines(self):
-        ops = [{"insert": "One\n\nTwo\n"}, {"insert": "Heading"}, {"insert": "\n", "attributes": {"header": 2}}, {"insert": "Four\n"}]
-        kept, used, truncated = delta.truncate_paragraphs(ops, 3)
-        self.assertEqual(used, 3)
-        self.assertTrue(truncated)
-        self.assertEqual(delta.plain_text(kept), "One\n\nTwo\nHeading\n")
-        self.assertEqual(kept[-1], {"insert": "\n", "attributes": {"header": 2}})
-
-    def test_truncate_whole_document_is_not_truncated(self):
-        kept, used, truncated = delta.truncate_paragraphs(doc("a", "b"), 5)
-        self.assertEqual(used, 2)
-        self.assertFalse(truncated)
-
     def test_validate_rejects_non_insert_ops(self):
         with self.assertRaises(ValueError):
             delta.validate_ops([{"delete": 3}])
@@ -86,21 +73,31 @@ class ReaderPaywallTests(APITestCase):
     def setUp(self):
         self.reader = User.objects.create_user(email="r@example.com", password="x", email_verified=True)
         self.genre = Genre.objects.create(name="Romance")
-        self.story = Story.objects.create(title="Paid", price=49, preview_page_count=2, status="published")
+        self.story = Story.objects.create(title="Paid", price=49, free_chapters=1, status="published")
         self.story.genres.add(self.genre)
         Chapter.objects.create(story=self.story, title="One", order=0, content=doc("p1"))
         Chapter.objects.create(story=self.story, title="Two", order=1, content=doc("p2", "p3"))
         Chapter.objects.create(story=self.story, title="Three", order=2, content=doc("p4"))
 
-    def test_locked_preview_spans_chapters(self):
+    def test_free_chapters_are_whole_and_the_rest_withheld(self):
         data = self.client.get(f"/api/stories/{self.story.slug}/").data
         self.assertTrue(data["locked"])
         chapters = data["chapters"]
         self.assertEqual([c["title"] for c in chapters], ["One", "Two", "Three"])
         self.assertFalse(chapters[0]["locked"])
-        self.assertEqual(delta.plain_text(chapters[1]["content"]), "p2\n")
-        self.assertTrue(chapters[1]["locked"])
+        self.assertEqual(delta.plain_text(chapters[0]["content"]), "p1\n")
+        self.assertEqual([c["locked"] for c in chapters[1:]], [True, True])
+        self.assertEqual([c["content"] for c in chapters[1:]], [None, None])
+
+        self.story.free_chapters = 2
+        self.story.save()
+        chapters = self.client.get(f"/api/stories/{self.story.slug}/").data["chapters"]
+        self.assertEqual(delta.plain_text(chapters[1]["content"]), "p2\np3\n")
         self.assertIsNone(chapters[2]["content"])
+
+        self.story.free_chapters = 3  # every chapter free: nothing left to sell
+        self.story.save()
+        self.assertFalse(self.client.get(f"/api/stories/{self.story.slug}/").data["locked"])
 
     def test_paid_subscription_unlocks(self):
         Subscription.objects.create(user=self.reader, story=self.story, amount=49, status="paid")
@@ -143,7 +140,7 @@ class AdminStudioTests(APITestCase):
     def test_create_story_edit_chapters_and_publish(self):
         response = self.client.post(
             "/api/admin/stories/",
-            {"title": "Bagong Kwento", "genre_ids": [self.fantasy.id], "price": "49.00", "preview_page_count": 2},
+            {"title": "Bagong Kwento", "genre_ids": [self.fantasy.id], "price": "49.00", "free_chapters": 2},
             format="json",
         )
         self.assertEqual(response.status_code, 201, response.data)
@@ -193,7 +190,7 @@ class AdminStudioTests(APITestCase):
         manifest = [{"filename": "two.txt", "title": "Pangalawa", "genre_ids": [horror.id], "price": "25"}]
         response = self.client.post(
             "/api/admin/stories/import/",
-            {"files": files, "genre_ids": str(self.fantasy.id), "manifest": json.dumps(manifest), "preview_page_count": "1"},
+            {"files": files, "genre_ids": str(self.fantasy.id), "manifest": json.dumps(manifest), "free_chapters": "1"},
             format="multipart",
         )
         self.assertEqual(response.status_code, 201, response.data)
@@ -208,7 +205,7 @@ class AdminStudioTests(APITestCase):
 
         story = Story.objects.get(pk=two["story_id"])
         self.assertEqual(story.price, 25)
-        self.assertEqual(story.preview_page_count, 1)
+        self.assertEqual(story.free_chapters, 1)
         self.assertEqual(story.status, "draft")
         self.assertEqual(story.chapters.get().title, "Chapter 1")
 

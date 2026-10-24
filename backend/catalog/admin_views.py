@@ -57,7 +57,11 @@ class AdminColumnViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdmin]
     serializer_class = ColumnSerializer
     pagination_class = None
-    queryset = Column.objects.all()
+
+    def get_queryset(self):
+        from django.db.models import Count
+
+        return Column.objects.annotate(story_count=Count("stories", distinct=True)).order_by("title")
 
 
 class AdminStoryViewSet(viewsets.ModelViewSet):
@@ -81,9 +85,14 @@ class AdminStoryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def publish(self, request, pk=None):
+        """Optional body {"price": "49.00"} sets the price in the same step (only while no one has paid)."""
         story = self.get_object()
         if not story.chapters.filter(word_count__gt=0).exists():
             return Response({"detail": "Write something before publishing."}, status=400)
+        if "price" in request.data:
+            serializer = self.get_serializer(story, data={"price": request.data["price"]}, partial=True)
+            serializer.is_valid(raise_exception=True)
+            story = serializer.save()
         first_time = story.published_at is None
         story.status = Story.Status.PUBLISHED
         story.save()
@@ -203,7 +212,7 @@ class AdminStoryImportView(APIView):
     multipart fields:
       files                  one or more .docx / .md / .txt files
       genre_ids              genre tags applied to every story
-      column_id, price, preview_page_count, status, author_name   shared defaults
+      column_id, price, free_chapters, status, author_name   shared defaults
       manifest               optional JSON list of per-file overrides:
                              [{"filename": "a.docx", "title": "...", "genre_ids": [1, 2], ...}]
       create_missing_genres  "true" to create genres named in Markdown front matter
@@ -222,7 +231,7 @@ class AdminStoryImportView(APIView):
 
         defaults_input = {
             key: request.data.get(key)
-            for key in ("column_id", "price", "preview_page_count", "status", "author_name")
+            for key in ("column_id", "price", "free_chapters", "status", "author_name")
             if request.data.get(key) not in (None, "")
         }
         defaults_input["genre_ids"] = _form_list(request.data, "genre_ids")
@@ -291,7 +300,7 @@ class AdminStoryImportView(APIView):
                 author_name=options.get("author_name") or manuscript.author_name,
                 column=options.get("column_id"),
                 price=options.get("price", 0),
-                preview_page_count=options.get("preview_page_count", 3),
+                free_chapters=options.get("free_chapters", 1),
                 status=Story.Status.DRAFT,
                 created_by=self.request.user,
             )
@@ -329,7 +338,7 @@ class AdminImportOneView(APIView):
       preview         "true" → only report what would be created (nothing is saved)
       chapter_titles  JSON list overriding detected chapter titles (create only)
       story           JSON with title, author_name, synopsis, genre_ids, column_id,
-                      price, preview_page_count, font_family, font_size (create only)
+                      price, free_chapters, font_family, font_size (create only)
     Word pictures are stored as story images and placed where they appeared.
     """
 
@@ -399,7 +408,7 @@ class AdminImportOneView(APIView):
                 "title": fields.get("title") or manuscript.title,
                 "author_name": fields.get("author_name", manuscript.author_name),
                 "synopsis": fields.get("synopsis", manuscript.synopsis),
-                **{k: fields[k] for k in ("genre_ids", "column_id", "price", "preview_page_count", "font_family", "font_size") if k in fields},
+                **{k: fields[k] for k in ("genre_ids", "column_id", "price", "free_chapters", "font_family", "font_size") if k in fields},
             }
             serializer = AdminStorySerializer(data=data, context={"request": request})
             serializer.is_valid(raise_exception=True)

@@ -112,7 +112,7 @@ export function ColumnModal({ open, onClose, initial, onSaved }) {
 
 /**
  * Everything needed to start a story in one step: title, author, synopsis,
- * genres, column, price, free preview and cover, with a live cover preview.
+ * genres, column, price, free chapters and cover, with a live cover preview.
  * Creates the story, uploads the cover, then opens it in the Studio.
  */
 export function NewStoryModal({ open, onClose }) {
@@ -142,7 +142,7 @@ export function NewStoryModal({ open, onClose }) {
       column_id: '',
       paid: false,
       price: 49,
-      preview_page_count: 3,
+      free_chapters: 1,
       font_family: 'literata',
       font_size: 18,
       title_font: 'fraunces',
@@ -211,7 +211,7 @@ export function NewStoryModal({ open, onClose }) {
       genre_ids: [...form.genre_ids],
       column_id: form.column_id ? Number(form.column_id) : null,
       price: form.paid && !freeByColumn ? String(form.price) : '0',
-      preview_page_count: Number(form.preview_page_count) || 0,
+      free_chapters: Number(form.free_chapters) || 0,
       font_family: form.font_family,
       font_size: Number(form.font_size),
       title_font: form.title_font,
@@ -495,13 +495,25 @@ export function NewStoryModal({ open, onClose }) {
                         </div>
                       </div>
                       {priceError && <p className="text-xs text-rose-400">{priceError}</p>}
-                      <label className="block">
+                      <div>
                         <span className="flex items-center justify-between text-sm">
-                          <span>Free preview</span>
-                          <span className="font-semibold">{form.preview_page_count} paragraph{Number(form.preview_page_count) === 1 ? '' : 's'}</span>
+                          <span>Free chapters before paying</span>
+                          {mode === 'upload' && preview && <span className="text-xs text-muted">of {preview.chapters.length}</span>}
                         </span>
-                        <input type="range" min="0" max="15" value={form.preview_page_count} onChange={set('preview_page_count')} className="mt-2 w-full accent-[var(--brand)]" />
-                      </label>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {[0, 1, 2, 3].map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => setForm({ ...form, free_chapters: n })}
+                              className={`chip ${Number(form.free_chapters) === n ? 'border-brand bg-brand/15' : 'border-line'}`}
+                            >
+                              {n === 0 ? 'None' : `${n} chapter${n === 1 ? '' : 's'}`}
+                            </button>
+                          ))}
+                          <input type="number" min="0" max="50" className="input !w-20 !py-1.5" value={form.free_chapters} onChange={set('free_chapters')} aria-label="Free chapters" />
+                        </div>
+                      </div>
                     </div>
                   )}
                 </>

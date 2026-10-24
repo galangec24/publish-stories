@@ -1,4 +1,4 @@
-import { FileUp, FolderKanban, Library, MailQuestion, MessageSquareText, MessagesSquare, ReceiptText, Tags, UserRoundPen, UsersRound } from 'lucide-react'
+import { FileUp, FolderKanban, Library, MailQuestion, MessageSquareText, MessagesSquare, QrCode, ReceiptText, ScanLine, Tags, UserRoundPen, UsersRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 
@@ -9,21 +9,26 @@ import { BulkImport } from './BulkImport'
 import { CommentsAdmin } from './CommentsAdmin'
 import { EmailRequests } from './EmailRequests'
 import { Columns, Genres, Payments } from './Managers'
+import { PaymentMethods, QrPayments } from './QrPayments'
 import { ReadersMonitor } from './ReadersMonitor'
 import { StoryList } from './StoryList'
 import { StoryStudio } from './StoryStudio'
 import { SupportInbox } from './SupportInbox'
 
-/** Live counts for the sidebar badges (unread chats, pending email requests). */
+/** Live counts for the sidebar badges (unread chats, pending email requests, QR payments to check). */
 function useBadges() {
-  const [badges, setBadges] = useState({ support: 0, email: 0 })
+  const [badges, setBadges] = useState({ support: 0, email: 0, qr: 0 })
   useEffect(() => {
     const load = () =>
-      Promise.all([api.get('admin/support/'), api.get('admin/email-requests/', { status: 'pending' })])
-        .then(([s, e]) => setBadges({ support: s.unread_total, email: e.pending_count }))
+      Promise.all([
+        api.get('admin/support/'),
+        api.get('admin/email-requests/', { status: 'pending' }),
+        api.get('admin/payments/manual/', { status: 'pending' }),
+      ])
+        .then(([s, e, q]) => setBadges({ support: s.unread_total, email: e.pending_count, qr: q.pending_count }))
         .catch(() => {})
     load()
-    const offs = ['support.message', 'support.read', 'email_request'].map((ev) => onLiveEvent(ev, load))
+    const offs = ['support.message', 'support.read', 'email_request', 'payments.changed'].map((ev) => onLiveEvent(ev, load))
     return () => offs.forEach((off) => off())
   }, [])
   return badges
@@ -34,6 +39,8 @@ function AdminShell({ children }) {
   const sections = [
     { to: '/admin', label: 'Stories', icon: Library, end: true },
     { to: '/admin/import', label: 'Bulk import', icon: FileUp },
+    { to: '/admin/qr-payments', label: 'QR payments', icon: ScanLine, badge: badges.qr },
+    { to: '/admin/payment-methods', label: 'Your QR codes', icon: QrCode },
     { to: '/admin/readers', label: 'Readers & payments', icon: UsersRound },
     { to: '/admin/support', label: 'Support inbox', icon: MessagesSquare, badge: badges.support },
     { to: '/admin/comments', label: 'Comments', icon: MessageSquareText },
@@ -77,6 +84,8 @@ export default function AdminRoutes() {
     <Routes>
       <Route path="stories/:id" element={<StoryStudio />} />
       <Route path="import" element={<AdminShell><BulkImport /></AdminShell>} />
+      <Route path="qr-payments" element={<AdminShell><QrPayments /></AdminShell>} />
+      <Route path="payment-methods" element={<AdminShell><PaymentMethods /></AdminShell>} />
       <Route path="readers" element={<AdminShell><ReadersMonitor /></AdminShell>} />
       <Route path="support" element={<AdminShell><SupportInbox /></AdminShell>} />
       <Route path="comments" element={<AdminShell><CommentsAdmin /></AdminShell>} />

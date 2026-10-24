@@ -1,9 +1,10 @@
-import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, Eye, Lock, MessageCircle, QrCode, ScrollText, UsersRound } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, Eye, Lock, MessageCircle, ScrollText, UsersRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { BookReader } from '../components/BookReader'
 import { ProtectedContent } from '../components/ProtectedContent'
+import { QrPaywall } from '../components/QrPaywall'
 import { LikeButton, StoryComments } from '../components/StoryCommunity'
 import { GenreTags, Spinner, useToast } from '../components/ui'
 import { api } from '../lib/api'
@@ -24,7 +25,6 @@ export function StoryPage() {
   const [index, setIndex] = useState(0)
   const [fromEnd, setFromEnd] = useState(false)
   const [tocOpen, setTocOpen] = useState(false)
-  const [paying, setPaying] = useState(false)
   const [counts, setCounts] = useState(null)
   const [social, setSocial] = useState({ liked: false }) // likes + comments, kept fresh by StoryComments
   const updateSocial = (patch) => setSocial((x) => ({ ...x, ...patch }))
@@ -45,6 +45,18 @@ export function StoryPage() {
       story.reload()
       setParams({}, { replace: true })
     }
+    // From the "Unlocked" email: ?code=ABCD-EFGH opens the story on this device.
+    const code = params.get('code')
+    if (code) {
+      setParams({}, { replace: true })
+      api
+        .post('access/claim/', { code })
+        .then(() => {
+          toast('Unlocked on this device!')
+          story.reload()
+        })
+        .catch((e) => toast(e, 'error'))
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -63,40 +75,34 @@ export function StoryPage() {
     if (mode === 'scroll') top.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  async function unlock() {
+  // Optional PayMongo checkout (signed-in readers, when the server has PayMongo keys).
+  async function payOnline() {
     if (!user) {
       navigate('/login', { state: { from: `/stories/${slug}` } })
       return
     }
-    setPaying(true)
     try {
       const { checkout_url, subscription } = await api.post(`subscribe/${s.id}/`)
       window.open(checkout_url, '_blank', 'noopener')
+      toast('Finish paying in the new tab. This page unlocks by itself.')
       let ticks = 0
       clearInterval(poll.current)
       poll.current = setInterval(async () => {
-        if (++ticks > 150) {
-          clearInterval(poll.current)
-          setPaying(false)
-          return
-        }
+        if (++ticks > 150) return clearInterval(poll.current)
         try {
           const sub = await api.get(`subscriptions/${subscription.id}/`)
           if (sub.status === 'paid') {
             clearInterval(poll.current)
             await story.reload()
-            setPaying(false)
             toast('Unlocked! Enjoy the full story.')
           } else if (sub.status === 'failed') {
             clearInterval(poll.current)
-            setPaying(false)
           }
         } catch {
           /* keep polling */
         }
       }, 4000)
     } catch (e) {
-      setPaying(false)
       toast(e, 'error')
     }
   }
@@ -109,7 +115,7 @@ export function StoryPage() {
       <h2 className="mt-2 mb-8 text-3xl text-page-ink" style={{ fontFamily: titleStack(s.title_font) }}>{chapter?.title}</h2>
       {chapter?.content && <DeltaView ops={chapter.content} fontFamily={fontStack(s.font_family)} fontSize={s.font_size} />}
       {showPaywall && (
-        <Paywall story={s} paying={paying} onUnlock={unlock} onRefresh={story.reload} signedIn={!!user} />
+        <QrPaywall story={s} signedIn={!!user} onUnlocked={story.reload} onOnlineCheckout={payOnline} />
       )}
     </>
   )
@@ -152,6 +158,11 @@ export function StoryPage() {
             {s.word_count.toLocaleString()} words · {s.chapters.length} chapters ·{' '}
             {s.is_free ? 'Free' : s.has_access ? 'Unlocked' : `₱${Number(s.price).toFixed(2)}`}
           </p>
+          {!s.has_access && s.free_chapters > 0 && (
+            <p className="mt-1 text-xs text-emerald-400">
+              {s.free_chapters >= s.chapters.length ? 'All chapters free' : `First ${s.free_chapters === 1 ? 'chapter' : `${s.free_chapters} chapters`} free`}
+            </p>
+          )}
 
           <div className="mt-4">
             <p className="mb-1.5 text-xs font-medium text-muted">Page style</p>
@@ -242,35 +253,6 @@ function Stat({ value, label, icon: Icon }) {
         {value}
       </p>
       <p className="mt-1 text-[11px] tracking-wide text-muted uppercase">{label}</p>
-    </div>
-  )
-}
-
-function Paywall({ story, paying, onUnlock, onRefresh, signedIn }) {
-  return (
-    <div className="relative mt-6 break-inside-avoid">
-      <div className="rounded-2xl border border-line bg-surface p-6 text-center">
-        <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-accent/15 text-accent"><Lock className="h-6 w-6" /></div>
-        <h3 className="font-display text-xl">Keep reading for ₱{Number(story.price).toFixed(2)}</h3>
-        <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-          One-time unlock. Pay with GCash, Maya or your bank app by scanning a QR Ph code.
-        </p>
-        {paying ? (
-          <div className="mt-5 space-y-3">
-            <div className="mx-auto h-1.5 w-48 overflow-hidden rounded-full bg-surface-2">
-              <div className="h-full w-1/3 animate-pulse rounded-full bg-accent" />
-            </div>
-            <p className="text-sm text-muted">Waiting for payment confirmation…</p>
-            <button className="text-sm text-brand underline" onClick={onRefresh}>
-              I already paid, refresh
-            </button>
-          </div>
-        ) : (
-          <button className="btn-primary mt-5" onClick={onUnlock}>
-            {signedIn ? 'Unlock with QR Ph' : 'Sign in to unlock'}
-          </button>
-        )}
-      </div>
     </div>
   )
 }

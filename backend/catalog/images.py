@@ -22,7 +22,13 @@ class InvalidImage(ValueError):
 
 
 def store_image(raw, user=None):
-    """Normalise an image (orientation, max 1600 px, WebP) and save it. Returns the StoryImage."""
+    """Normalise an image and save it. Returns the StoryImage."""
+    data, width, height = normalize_image(raw)
+    return StoryImage.objects.create(data=data, width=width, height=height, size=len(data), uploaded_by=user)
+
+
+def normalize_image(raw):
+    """Fix orientation, fit within 1600 px and re-encode as WebP (dropping metadata). Returns (bytes, w, h)."""
     try:
         img = Image.open(io.BytesIO(raw) if isinstance(raw, (bytes, bytearray)) else raw)
         img = ImageOps.exif_transpose(img)
@@ -32,8 +38,7 @@ def store_image(raw, user=None):
     img.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
     out = io.BytesIO()
     img.save(out, "WEBP", quality=84, method=6)
-    data = out.getvalue()
-    return StoryImage.objects.create(data=data, width=img.width, height=img.height, size=len(data), uploaded_by=user)
+    return out.getvalue(), img.width, img.height
 
 
 def image_url(request, stored):

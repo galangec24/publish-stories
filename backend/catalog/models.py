@@ -69,8 +69,8 @@ class Story(models.Model):
     cover_image = models.ImageField(upload_to="covers/", blank=True)
     column = models.ForeignKey(Column, null=True, blank=True, on_delete=models.SET_NULL, related_name="stories")
     genres = models.ManyToManyField(Genre, blank=True, related_name="stories")
-    preview_page_count = models.PositiveIntegerField(
-        default=3, help_text="Paragraphs shown to readers who haven't unlocked the story"
+    free_chapters = models.PositiveSmallIntegerField(
+        default=1, help_text="Chapters anyone can read before paying (0 locks the whole story)"
     )
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="PHP; 0 means free")
     # Reading typography chosen by the author; readers see the story in this font and size.
