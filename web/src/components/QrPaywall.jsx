@@ -1,8 +1,8 @@
-import { Building2, CheckCircle2, Clock, Copy, Download, ImagePlus, KeyRound, Lock, QrCode, ShieldCheck, TriangleAlert, Wallet, Wifi, Zap } from 'lucide-react'
+import { Building2, CheckCircle2, Copy, Download, ImagePlus, KeyRound, Lock, ReceiptText, ShieldCheck, TriangleAlert, Wallet, Wifi, Zap } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
-import { withAmount } from '../lib/qrph'
+import { parseQrPh, readQrFromFile, withAmount } from '../lib/qrph'
 import { useAsync } from '../lib/useAsync'
 import { Modal } from './Modal'
 import { useToast } from './ui'
@@ -10,21 +10,27 @@ import { useToast } from './ui'
 const peso = (n) => `₱${Number(n).toFixed(2)}`
 const EWALLETS = ['gcash', 'maya', 'shopeepay', 'gotyme']
 const isWallet = (method) => EWALLETS.includes(method.name.trim().toLowerCase())
-const methodLabel = (method) => (isWallet(method) ? method.name : `Bank transfer (${method.name})`)
+const tabLabel = (method) => (isWallet(method) ? method.name : 'Bank transfer')
 
-/** Shown at the end of the free chapters: pick GCash or a bank, then scan a QR that already has the price. */
+/**
+ * End of the free chapters: the QR is right here (GCash / bank tabs) with the price already in it.
+ * After paying, "I've paid" asks for the reference number and the story opens immediately;
+ * the author checks the transfer later and can revoke it if the money never arrived.
+ */
 export function QrPaywall({ story, signedIn, onUnlocked }) {
   const toast = useToast()
   const options = useAsync(() => api.get('payment-methods/'), [])
-  const [open, setOpen] = useState(null) // { methodId } or { code: true }
+  const [methodId, setMethodId] = useState(null)
+  const [dialog, setDialog] = useState(null) // 'paid' | 'code'
   const [redirecting, setRedirecting] = useState(false)
   const purchase = story.purchase
-  const pending = purchase?.status === 'pending'
   const free = story.free_chapters
   const list = options.data?.methods || []
   const instant = options.data?.online_checkout
+  const method = list.find((m) => m.id === methodId) || list[0]
+  const qr = useAmountQr(method, story.price)
 
-  // PayMongo's page shows a QR Ph code with the amount set; its webhook unlocks the story, no approval needed.
+  // PayMongo's page shows a QR Ph code with the amount set; its webhook unlocks the story.
   async function payInstantly() {
     setRedirecting(true)
     try {
@@ -43,73 +49,106 @@ export function QrPaywall({ story, signedIn, onUnlocked }) {
 
   return (
     <div className="relative mt-6 break-inside-avoid">
-      <div className="rounded-2xl border border-line bg-surface p-6 text-center">
-        <div className={`mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl ${pending ? 'bg-amber-500/15 text-amber-400' : 'bg-accent/15 text-accent'}`}>
-          {pending ? <Clock className="h-6 w-6" /> : <Lock className="h-6 w-6" />}
-        </div>
-        {pending ? (
+      <div className="rounded-2xl border border-line bg-surface p-5 text-center">
+        <p className="flex items-center justify-center gap-2 font-display text-xl">
+          <Lock className="h-5 w-5 text-accent" /> Keep reading for {peso(story.price)}
+        </p>
+        <p className="mx-auto mt-1 max-w-sm text-xs text-muted">
+          {free > 0 ? `The first ${free === 1 ? 'chapter is' : `${free} chapters are`} free. ` : ''}
+          Scan to pay once and the whole story opens. No account needed.
+        </p>
+        {purchase?.status === 'rejected' && (
+          <p className="mx-auto mt-3 flex max-w-sm items-start gap-2 rounded-xl bg-rose-500/10 p-3 text-left text-xs text-rose-300">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Your payment (ref {purchase.reference_number}) wasn&apos;t received, so the story was locked again.
+              {purchase.admin_note ? ` “${purchase.admin_note}”` : ''}
+            </span>
+          </p>
+        )}
+
+        {options.loading && !options.data ? (
+          <div className="mx-auto mt-4 aspect-square w-52 animate-pulse rounded-2xl bg-surface-2" />
+        ) : method ? (
           <>
-            <h3 className="font-display text-xl">Payment sent. Waiting for confirmation</h3>
-            <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-              The author checks each transfer by hand. This chapter opens by itself once it&apos;s confirmed.
+            {list.length > 1 && (
+              <div className="mx-auto mt-4 flex max-w-xs gap-1 rounded-xl border border-line p-1">
+                {list.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMethodId(m.id)}
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium whitespace-nowrap transition ${m.id === method.id ? 'bg-brand text-white shadow' : 'text-muted hover:text-ink'}`}
+                  >
+                    {isWallet(m) ? <Wallet className="h-4 w-4 shrink-0" /> : <Building2 className="h-4 w-4 shrink-0" />}
+                    {tabLabel(m)}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="mx-auto mt-3 w-56 rounded-2xl bg-white p-2 shadow-lg">
+              {qr ? (
+                <img src={qr} alt={`${method.name} QR for ${peso(story.price)}`} className="w-full" />
+              ) : qr === null ? (
+                <img src={method.qr_url} alt={`${method.name} QR code`} className="max-h-72 w-full rounded-xl object-contain" />
+              ) : (
+                <div className="aspect-square w-full animate-pulse rounded-xl bg-gray-200" />
+              )}
+              <p className="pb-1 text-sm font-semibold text-gray-800">
+                {method.name} · <span className="text-teal-700">{peso(story.price)}</span>
+              </p>
+            </div>
+            <p className="mt-2 text-xs text-muted">
+              {qr ? 'The amount fills in when you scan.' : `Enter ${peso(story.price)} when you pay.`}
+              {(method.account_name || method.account_number) && (
+                <> Pays {[method.account_name, method.account_number].filter(Boolean).join(' · ')}.</>
+              )}
             </p>
-            <PendingWatcher purchase={purchase} onPaid={onUnlocked} />
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
+              <button type="button" className="btn-primary" onClick={() => setDialog('paid')}>
+                <ReceiptText className="h-4 w-4" /> I&apos;ve paid
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => saveQrImage({ qr, method, story })}>
+                <Download className="h-4 w-4" /> Save QR
+              </button>
+            </div>
+            <p className="mx-auto mt-2 max-w-xs text-[11px] text-muted">
+              Paying on this phone? Save the QR, then open GCash or your bank app and upload it in the QR scanner.
+            </p>
           </>
         ) : (
-          <>
-            <h3 className="font-display text-xl">Keep reading for {peso(story.price)}</h3>
-            <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-              {free > 0 ? `The first ${free === 1 ? 'chapter is' : `${free} chapters are`} free. ` : ''}
-              Unlock the whole story once. No account needed.
-            </p>
-            {purchase?.status === 'rejected' && (
-              <p className="mx-auto mt-3 flex max-w-sm items-start gap-2 rounded-xl bg-rose-500/10 p-3 text-left text-sm text-rose-300">
-                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  Your last payment (ref {purchase.reference_number}) wasn&apos;t confirmed.
-                  {purchase.admin_note ? ` “${purchase.admin_note}”` : ''} You can send it again.
-                </span>
-              </p>
-            )}
-            <div className="mt-5 flex flex-wrap justify-center gap-3">
-              {instant && (
-                <button className="btn-primary" onClick={payInstantly} disabled={redirecting}>
-                  <Zap className="h-4 w-4" /> {redirecting ? 'Opening secure payment…' : 'Instant QR Ph (unlocks right away)'}
-                </button>
-              )}
-              {options.loading && !options.data ? (
-                <button className="btn-primary" disabled>Loading payment options…</button>
-              ) : list.length ? (
-                list.map((m) => {
-                  const Icon = isWallet(m) ? Wallet : Building2
-                  return (
-                    <button key={m.id} className={instant ? 'btn-ghost' : 'btn-primary'} onClick={() => setOpen({ methodId: m.id })}>
-                      <Icon className="h-4 w-4" /> Pay with {methodLabel(m)}
-                    </button>
-                  )
-                })
-              ) : (
-                !instant && <p className="text-sm text-muted">Payments open soon. Please check back.</p>
-              )}
-            </div>
-            <button type="button" className="mt-4 inline-flex items-center gap-1.5 text-sm text-brand hover:underline" onClick={() => setOpen({ code: true })}>
-              <KeyRound className="h-4 w-4" /> Already paid? Enter your access code
-            </button>
-          </>
+          !instant && <p className="mt-4 text-sm text-muted">Payments open soon. Please check back.</p>
         )}
+
+        {instant && (
+          <button className="btn-ghost mt-3" onClick={payInstantly} disabled={redirecting}>
+            <Zap className="h-4 w-4" /> {redirecting ? 'Opening secure payment…' : 'Instant QR Ph checkout'}
+          </button>
+        )}
+        <button type="button" className="mt-3 flex w-full items-center justify-center gap-1.5 text-sm text-brand hover:underline" onClick={() => setDialog('code')}>
+          <KeyRound className="h-4 w-4" /> Paid on another device? Enter your access code
+        </button>
       </div>
-      <PayModal
-        open={Boolean(open)}
-        start={open}
-        methods={list}
-        onClose={() => setOpen(null)}
+
+      <PaidDialog
+        open={dialog === 'paid'}
+        method={method}
         story={story}
         signedIn={signedIn}
-        onDone={() => {
-          setOpen(null)
+        onClose={() => setDialog(null)}
+        onUnlocked={() => {
+          setDialog(null)
           onUnlocked()
         }}
       />
+      <Modal open={dialog === 'code'} onClose={() => setDialog(null)} title="Enter your access code" subtitle="The code you got after paying, e.g. ABCD-EFGH." icon={KeyRound} size="max-w-md">
+        <ClaimCode
+          onClaimed={() => {
+            setDialog(null)
+            onUnlocked()
+          }}
+        />
+      </Modal>
     </div>
   )
 }
@@ -128,51 +167,31 @@ function CodeBox({ code }) {
   )
 }
 
-/** Polls the purchase while the admin reviews it. */
-function PendingWatcher({ purchase, onPaid }) {
-  const toast = useToast()
-  useEffect(() => {
-    const timer = setInterval(async () => {
-      try {
-        const { purchase: now } = await api.get(`payments/manual/${purchase.access_code}/`)
-        if (now.status !== 'pending') {
-          clearInterval(timer)
-          if (now.status === 'paid') toast('Payment confirmed. Enjoy the full story!')
-          onPaid()
-        }
-      } catch {
-        /* try again next tick */
-      }
-    }, 15000)
-    return () => clearInterval(timer)
-  }, [purchase.access_code, onPaid, toast])
-
-  return (
-    <div className="mx-auto mt-4 max-w-sm text-sm">
-      <p className="text-muted">
-        {peso(purchase.amount)} via {purchase.method_name} · ref <span className="font-mono">{purchase.reference_number}</span>
-      </p>
-      <p className="mt-3 text-xs text-muted">Your access code (save it to read on another phone or computer):</p>
-      <CodeBox code={purchase.access_code} />
-    </div>
-  )
-}
-
 /**
  * The method's QR redrawn with the story price inside, so the banking app fills in the amount.
- * Falls back to the uploaded picture when the QR's contents aren't known.
+ * Uses the saved QR contents, or reads the uploaded picture if they weren't saved.
+ * undefined while working, null when only the original picture can be shown.
  */
 function useAmountQr(method, amount) {
-  const [src, setSrc] = useState(null)
+  const [src, setSrc] = useState(undefined)
   useEffect(() => {
-    setSrc(null)
-    const payload = method?.qr_payload && withAmount(method.qr_payload, amount)
-    if (!payload) return
+    if (!method) return
     let live = true
-    import('qrcode')
-      .then(({ default: QRCode }) => QRCode.toDataURL(payload, { errorCorrectionLevel: 'M', margin: 2, width: 640 }))
-      .then((url) => live && setSrc(url))
-      .catch(() => {})
+    setSrc(undefined)
+    const payload = method.qr_payload
+      ? Promise.resolve(method.qr_payload)
+      : fetch(method.qr_url)
+          .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+          .then(readQrFromFile)
+          .then((text) => (parseQrPh(text)?.valid ? text : null))
+    payload
+      .then((text) => {
+        const withPrice = text && withAmount(text, amount)
+        if (!withPrice) return null
+        return import('qrcode').then(({ default: QRCode }) => QRCode.toDataURL(withPrice, { errorCorrectionLevel: 'M', margin: 2, width: 640 }))
+      })
+      .then((url) => live && setSrc(url || null))
+      .catch(() => live && setSrc(null))
     return () => {
       live = false
     }
@@ -182,6 +201,10 @@ function useAmountQr(method, amount) {
 
 /** A picture to keep in the gallery: method, amount, story and the QR, for "upload QR" in GCash or a bank app. */
 async function saveQrImage({ qr, method, story }) {
+  if (!qr) {
+    window.open(method.qr_url, '_blank', 'noopener')
+    return
+  }
   const img = new Image()
   img.src = qr
   await img.decode()
@@ -210,24 +233,14 @@ async function saveQrImage({ qr, method, story }) {
   link.click()
 }
 
-function PayModal({ open, start, methods, onClose, story, signedIn, onDone }) {
+/** "I've paid": the reference number unlocks the story right away. */
+function PaidDialog({ open, method, story, signedIn, onClose, onUnlocked }) {
   const toast = useToast()
-  const [methodId, setMethodId] = useState(null)
   const [form, setForm] = useState({ reference: '', payer_name: '', payer_email: '' })
   const [proof, setProof] = useState(null)
   const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState({})
   const [done, setDone] = useState(null)
-  const [codeOpen, setCodeOpen] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-    setMethodId(start?.methodId ?? null)
-    setCodeOpen(Boolean(start?.code))
-  }, [open, start])
-
-  const method = methods.find((m) => m.id === methodId) || methods[0]
-  const qr = useAmountQr(open ? method : null, story.price)
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
 
   async function submit(e) {
@@ -251,152 +264,64 @@ function PayModal({ open, start, methods, onClose, story, signedIn, onDone }) {
   }
 
   const close = () => {
-    if (done) onDone()
+    if (done) onUnlocked()
     else onClose()
     setDone(null)
   }
 
-  const codeOnly = codeOpen && !methodId && start?.code
+  if (!method) return null
   return (
     <Modal
       open={open}
       onClose={close}
-      title={done ? 'Payment sent' : codeOnly ? 'Enter your access code' : `Unlock “${story.title}”`}
-      subtitle={
-        done
-          ? 'We’ll unlock it as soon as the author confirms it.'
-          : codeOnly
-            ? 'The code you got after paying, e.g. ABCD-EFGH.'
-            : `One-time payment of ${peso(story.price)}`
-      }
-      icon={done ? CheckCircle2 : codeOnly ? KeyRound : QrCode}
-      size={codeOnly ? 'max-w-md' : 'max-w-2xl'}
+      title={done ? 'Unlocked! Enjoy the story' : 'Almost there'}
+      subtitle={done ? 'Thank you for supporting the author.' : `${peso(story.price)} via ${method.name}`}
+      icon={done ? CheckCircle2 : ReceiptText}
     >
       {done ? (
         <div className="space-y-4 text-center">
-          <p className="text-sm text-muted">
-            Keep this access code. It opens the story on any other phone or computer, even without an account.
-          </p>
+          <p className="text-sm text-muted">Save this access code. It opens the story on any other phone or computer, even without an account.</p>
           <CodeBox code={done.access_code} />
-          <ul className="mx-auto max-w-md space-y-2 text-left text-sm text-muted">
-            <li className="flex gap-2"><Clock className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> Confirmation is done by hand, usually within the day. This page updates by itself.</li>
-            <li className="flex gap-2"><Wifi className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> Once confirmed, other devices on this same Wi-Fi open it automatically.</li>
-          </ul>
-          <button className="btn-primary" onClick={close}>Back to the story</button>
+          <p className="mx-auto flex max-w-sm gap-2 text-left text-xs text-muted">
+            <Wifi className="h-4 w-4 shrink-0 text-brand" /> Other devices on this same Wi-Fi open it automatically too.
+          </p>
+          <button className="btn-primary" onClick={close}>Start reading</button>
         </div>
-      ) : codeOnly ? (
-        <ClaimCode onClaimed={onDone} />
-      ) : !method ? (
-        <p className="py-6 text-center text-sm text-muted">Payments open soon. Please check back.</p>
       ) : (
-        <>
-          <div className="grid gap-6 md:grid-cols-[minmax(0,270px)_1fr]">
-            <div>
-              {methods.length > 1 && (
-                <div className="mb-3 flex gap-1 rounded-xl border border-line p-1">
-                  {methods.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => setMethodId(m.id)}
-                      className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium transition ${m.id === method.id ? 'bg-brand text-white shadow' : 'text-muted hover:text-ink'}`}
-                    >
-                      {isWallet(m) ? <Wallet className="h-4 w-4" /> : <Building2 className="h-4 w-4" />}
-                      {isWallet(m) ? m.name : 'Bank transfer'}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="rounded-2xl bg-white p-2 text-center shadow-lg">
-                {method.qr_payload ? (
-                  qr ? <img src={qr} alt={`${method.name} QR for ${peso(story.price)}`} className="mx-auto w-full max-w-64" /> : <div className="mx-auto aspect-square w-full max-w-64 animate-pulse rounded-xl bg-gray-200" />
-                ) : (
-                  <img src={method.qr_url} alt={`${method.name} QR code`} className="mx-auto max-h-80 w-full rounded-xl object-contain" />
-                )}
-                <p className="pb-1 text-sm font-semibold text-gray-800">
-                  {method.name} · <span className="text-teal-700">{peso(story.price)}</span>
-                </p>
-              </div>
-              {qr ? (
-                <button type="button" onClick={() => saveQrImage({ qr, method, story })} className="btn-ghost mt-2 w-full !py-1.5 text-sm">
-                  <Download className="h-4 w-4" /> Save QR to your phone
-                </button>
-              ) : (
-                <a href={method.qr_url} download={`${method.name}-QR`} target="_blank" rel="noreferrer" className="btn-ghost mt-2 w-full !py-1.5 text-sm">
-                  <Download className="h-4 w-4" /> Save QR to your phone
-                </a>
-              )}
-              {(method.account_name || method.account_number) && (
-                <p className="mt-2 text-center text-xs text-muted">
-                  Pays {[method.account_name, method.account_number].filter(Boolean).join(' · ')}
-                </p>
-              )}
-            </div>
-
-            <form onSubmit={submit} className="space-y-4">
-              <ol className="space-y-2 text-sm">
-                <li>
-                  <b>1.</b> Scan with {isWallet(method) ? method.name : 'your bank app'} or any app that pays InstaPay QR. On this phone? Save the QR, then
-                  upload it in the app&apos;s scanner.
-                </li>
-                <li>
-                  <b>2.</b>{' '}
-                  {method.qr_payload ? (
-                    <>The amount <b className="text-accent">{peso(story.price)}</b> fills in by itself. Just confirm the payment.</>
-                  ) : (
-                    <>Send exactly <b className="text-accent">{peso(story.price)}</b>.</>
-                  )}
-                </li>
-                <li><b>3.</b> Type the reference number from your receipt below.</li>
-              </ol>
-              {method.instructions && <p className="rounded-xl bg-surface-2/70 p-3 text-xs whitespace-pre-line text-muted">{method.instructions}</p>}
-
-              <label className="block">
-                <span className="text-sm font-medium">Reference number</span>
-                <input className="input mt-1 font-mono" required value={form.reference} onChange={set('reference')} placeholder="e.g. 1012 345 678901" autoComplete="off" />
-                {errors.reference && <span className="mt-1 block text-xs text-rose-400">{errors.reference[0]}</span>}
-              </label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block">
-                  <span className="text-sm font-medium">Your name <span className="text-muted">(optional)</span></span>
-                  <input className="input mt-1" value={form.payer_name} onChange={set('payer_name')} maxLength={120} />
-                </label>
-                <label className="block">
-                  <span className="text-sm font-medium">Email <span className="text-muted">(optional)</span></span>
-                  <input className="input mt-1" type="email" value={form.payer_email} onChange={set('payer_email')} placeholder="We'll send your code" />
-                  {errors.payer_email && <span className="mt-1 block text-xs text-rose-400">{errors.payer_email[0]}</span>}
-                </label>
-              </div>
-              <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-line p-3 text-sm hover:border-brand">
-                <ImagePlus className="h-5 w-5 text-brand" />
-                <span className="min-w-0 flex-1 truncate">{proof ? proof.name : 'Attach the receipt screenshot (optional, helps us confirm faster)'}</span>
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => setProof(e.target.files[0] || null)} />
-              </label>
-              {errors.proof && <span className="block text-xs text-rose-400">{errors.proof[0]}</span>}
-              {errors.method && <span className="block text-xs text-rose-400">{errors.method[0]}</span>}
-
-              <button className="btn-primary w-full" disabled={busy || !form.reference.trim()}>
-                {busy ? 'Sending…' : 'I have paid'}
-              </button>
-              <p className="flex items-start gap-2 text-xs text-muted">
-                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                {signedIn
-                  ? 'It unlocks on your account, so every device you sign in to can read it.'
-                  : 'No account needed: it unlocks on this device, on others using the same Wi-Fi, and anywhere you enter your access code.'}
-              </p>
-            </form>
+        <form onSubmit={submit} className="space-y-4">
+          <label className="block">
+            <span className="text-sm font-medium">Reference number from your receipt</span>
+            <input className="input mt-1 font-mono" required value={form.reference} onChange={set('reference')} placeholder="e.g. 1012 345 678901" autoComplete="off" />
+            {errors.reference && <span className="mt-1 block text-xs text-rose-400">{errors.reference[0]}</span>}
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-medium">Your name <span className="text-muted">(optional)</span></span>
+              <input className="input mt-1" value={form.payer_name} onChange={set('payer_name')} maxLength={120} />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium">Email <span className="text-muted">(optional)</span></span>
+              <input className="input mt-1" type="email" value={form.payer_email} onChange={set('payer_email')} placeholder="We'll send your code" />
+              {errors.payer_email && <span className="mt-1 block text-xs text-rose-400">{errors.payer_email[0]}</span>}
+            </label>
           </div>
-
-          <div className="mt-6 border-t border-line/70 pt-4">
-            {codeOpen ? (
-              <ClaimCode onClaimed={onDone} />
-            ) : (
-              <button type="button" className="flex items-center gap-2 text-sm text-brand hover:underline" onClick={() => setCodeOpen(true)}>
-                <KeyRound className="h-4 w-4" /> Already paid on another device? Enter your access code
-              </button>
-            )}
-          </div>
-        </>
+          <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-line p-3 text-sm hover:border-brand">
+            <ImagePlus className="h-5 w-5 text-brand" />
+            <span className="min-w-0 flex-1 truncate">{proof ? proof.name : 'Attach the receipt screenshot (optional)'}</span>
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => setProof(e.target.files[0] || null)} />
+          </label>
+          {errors.proof && <span className="block text-xs text-rose-400">{errors.proof[0]}</span>}
+          {errors.method && <span className="block text-xs text-rose-400">{errors.method[0]}</span>}
+          <button className="btn-primary w-full" disabled={busy || !form.reference.trim()}>
+            {busy ? 'Unlocking…' : 'Unlock the story'}
+          </button>
+          <p className="flex items-start gap-2 text-xs text-muted">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+            {signedIn
+              ? 'It opens on your account right away. The author checks each payment later; if the money never arrived, access is removed.'
+              : 'It opens right away on this device and others on the same Wi-Fi. The author checks each payment later; if the money never arrived, access is removed.'}
+          </p>
+        </form>
       )}
     </Modal>
   )

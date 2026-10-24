@@ -54,23 +54,19 @@ class ManualPaymentTests(APITestCase):
         self.client.force_authenticate(None)
         return response
 
-    def test_guest_pays_then_reads_on_same_device_and_same_wifi(self):
+    def test_guest_pays_reads_right_away_and_admin_confirms_later(self):
         self.assertEqual(self.client.get("/api/payment-methods/").data["methods"][0]["name"], "GCash")
         response = self.pay(payer_name="Lia", proof=png())
         self.assertEqual(response.status_code, 201, response.data)
         purchase = response.data["purchase"]
-        self.assertEqual(purchase["status"], "pending")
+        self.assertEqual(purchase["status"], "paid")  # unlocked now, checked later
         self.assertRegex(purchase["access_code"], r"^[A-Z2-9]{4}-[A-Z2-9]{4}$")
         self.assertEqual(self.admin.notifications.filter(kind="payment_submitted").count(), 1)
-
-        # Waiting for the author: still locked, but the page knows about the payment.
-        data = self.read(device(1))
-        self.assertTrue(data["locked"])
-        self.assertEqual(data["purchase"]["status"], "pending")
-        self.assertEqual(self.pay(reference="999999").status_code, 400)  # one pending payment at a time
+        self.assertFalse(self.read(device(1))["locked"])
+        self.assertEqual(self.pay(reference="999999").status_code, 400)  # already unlocked
 
         self.client.force_authenticate(self.admin)
-        listing = self.client.get("/api/admin/payments/manual/").data
+        listing = self.client.get("/api/admin/payments/manual/").data  # "To check"
         self.assertEqual(listing["pending_count"], 1)
         self.assertTrue(listing["results"][0]["has_proof"])
         proof = self.client.get(f"/api/admin/payments/manual/{purchase['id']}/proof/")
@@ -78,18 +74,22 @@ class ManualPaymentTests(APITestCase):
         self.client.force_authenticate(None)
         self.assertEqual(self.client.get(f"/api/admin/payments/manual/{purchase['id']}/proof/").status_code, 401)
 
-        self.assertEqual(self.approve(purchase["id"]).data["status"], "paid")
-        self.assertFalse(self.read(device(1))["locked"])
+        confirmed = self.approve(purchase["id"]).data
+        self.assertEqual(confirmed["status"], "paid")
+        self.assertIsNotNone(confirmed["reviewed_at"])
+        self.client.force_authenticate(self.admin)
+        self.assertEqual(self.client.get("/api/admin/payments/manual/").data["pending_count"], 0)
+        self.assertEqual(len(self.client.get("/api/admin/payments/manual/", {"status": "paid"}).data["results"]), 1)
+        self.client.force_authenticate(None)
+
         self.assertFalse(self.read(device(1), ip=CAFE)["locked"])  # the paying device works anywhere
         self.assertTrue(self.read(device(2), ip=CAFE)["locked"])  # a stranger at the cafe doesn't get in
-
         # The family laptop at home gets in without an account, and keeps access when it leaves.
         self.assertFalse(self.read(device(3))["locked"])
         self.assertFalse(self.read(device(3), ip=CAFE)["locked"])
 
     def test_network_sharing_stops_at_the_device_cap(self):
-        purchase = self.pay().data["purchase"]
-        self.approve(purchase["id"])
+        self.pay()
         self.read(device(1))
         self.assertFalse(self.read(device(2))["locked"])
         self.assertFalse(self.read(device(3))["locked"])
@@ -101,8 +101,6 @@ class ManualPaymentTests(APITestCase):
         claim = lambda dev, c=code: self.client.post(  # noqa: E731
             "/api/access/claim/", {"code": c}, format="json", HTTP_X_VIEWER_ID=dev, HTTP_X_FORWARDED_FOR=CAFE
         )
-        self.assertIn("being checked", str(claim(device(5)).data))
-        self.approve(purchase["id"])
         self.assertEqual(claim(device(5), code.lower().replace("-", " ")).status_code, 200)  # forgiving typing
         self.assertFalse(self.read(device(5), ip=CAFE)["locked"])
         self.assertEqual(claim(device(6), "AAAA-AAAA").status_code, 400)
@@ -113,26 +111,28 @@ class ManualPaymentTests(APITestCase):
         self.assertEqual(Subscription.objects.get().user, reader)
         self.assertFalse(self.client.get(self.url).data["locked"])  # now on every device they sign in to
 
-    def test_reference_reuse_reject_and_validation(self):
+    def test_revoke_locks_again_and_kills_the_code(self):
         self.assertEqual(self.pay(reference="ab").status_code, 400)
         purchase = self.pay().data["purchase"]
-        self.assertIn("reference", self.pay(dev=device(9), reference="1234567890123").data)
+        self.assertIn("reference", self.pay(dev=device(9), ip=CAFE, reference="1234567890123").data)
+        self.assertFalse(self.read(device(1))["locked"])
 
         self.client.force_authenticate(self.admin)
-        rejected = self.client.post(f"/api/admin/payments/manual/{purchase['id']}/reject/", {"note": "Not found"}, format="json")
-        self.assertEqual(rejected.data["status"], "rejected")
+        revoked = self.client.post(f"/api/admin/payments/manual/{purchase['id']}/reject/", {"note": "Not found"}, format="json")
+        self.assertEqual(revoked.data["status"], "rejected")
         self.client.force_authenticate(None)
         data = self.read(device(1))
         self.assertTrue(data["locked"])
         self.assertEqual(data["purchase"]["admin_note"], "Not found")
+        bad = self.client.post("/api/access/claim/", {"code": purchase["access_code"]}, format="json", HTTP_X_VIEWER_ID=device(7))
+        self.assertIn("wasn't received", str(bad.data))
         self.assertEqual(self.pay(reference="77777777").status_code, 201)  # can try again
 
     def test_signed_in_payment_unlocks_account_and_notifies(self):
         reader = User.objects.create_user(email="r@example.com", password="x", first_name="Rey", email_verified=True)
         self.client.force_authenticate(reader)
-        purchase = self.pay().data["purchase"]
-        self.approve(purchase["id"])
-        self.client.force_authenticate(reader)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.pay()
         self.assertFalse(self.client.get(self.url, HTTP_X_VIEWER_ID=device(8)).data["locked"])
         self.assertEqual(reader.notifications.filter(kind="payment_paid").count(), 1)
 

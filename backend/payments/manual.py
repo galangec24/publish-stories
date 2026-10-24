@@ -1,8 +1,12 @@
 """QR payments: the reader scans the author's GCash or bank QR, then sends the reference number.
 
-The admin checks the transfer arrived and approves it; that unlocks the story for
-the reader's account (if signed in), the device they paid on, devices on the same
-network, and anyone who enters the purchase's access code (within the device cap).
+Personal GCash/bank accounts can't tell the site when money arrives, so the story
+unlocks as soon as the reader sends the reference number ("unlock now, check
+later"). Each payment waits in the admin's "To check" list: Confirm once the
+transfer shows up in the app, or Revoke to take the access back.
+
+A purchase unlocks the reader's account (if signed in), the device they paid on,
+devices on the same network, and anyone with its access code (within the device cap).
 """
 import html
 import logging
@@ -27,7 +31,7 @@ from catalog.models import Story
 from notifications.realtime import push_admins
 from notifications.service import first_name, notify, notify_admins
 
-from .access import add_device, device_key, has_full_access, network_key, purchases_for
+from .access import add_device, device_key, has_full_access, network_key
 from .models import PaymentMethod, PaymentProof, Subscription, new_access_code
 
 logger = logging.getLogger(__name__)
@@ -154,13 +158,6 @@ class ManualPaymentView(APIView):
         if used.exists():
             return Response({"reference": ["This reference number was already sent."]}, status=400)
 
-        waiting = purchases_for(request, story).filter(status=Subscription.Status.PENDING, provider=Subscription.Provider.MANUAL).first()
-        if waiting:
-            return Response(
-                {"detail": "We're still checking your earlier payment for this story.", "purchase": PurchaseSerializer(waiting).data},
-                status=400,
-            )
-
         user = request.user if request.user.is_authenticated else None
         payer_name = str(data.get("payer_name", "")).strip()[:120] or (first_name(user) if user else "")
         payer_email = str(data.get("payer_email", "")).strip()[:254] or (user.email if user else "")
@@ -186,6 +183,8 @@ class ManualPaymentView(APIView):
                 story=story,
                 amount=story.price,
                 provider=Subscription.Provider.MANUAL,
+                status=Subscription.Status.PAID,  # unlocked now; the admin checks it later
+                paid_at=timezone.now(),
                 method=method,
                 reference_number=reference,
                 payer_name=payer_name,
@@ -202,6 +201,7 @@ class ManualPaymentView(APIView):
             if proof_bytes:
                 PaymentProof.objects.create(subscription=purchase, data=proof_bytes)
             add_device(purchase, device_key(request), network_key(request))
+            transaction.on_commit(lambda: _tell_reader(purchase))
 
         who = f"{first_name(user)} ({user.email})" if user else (payer_name or "A guest")
         notify_admins(
@@ -215,7 +215,7 @@ class ManualPaymentView(APIView):
 
 
 class PurchaseStatusView(APIView):
-    """GET /api/payments/manual/<code>/ — polled while the admin checks the payment."""
+    """GET /api/payments/manual/<code>/ — a purchase's current status, by its access code."""
 
     permission_classes = [permissions.AllowAny]
     throttle_classes = [ScopedRateThrottle]
@@ -242,7 +242,7 @@ class ClaimAccessView(APIView):
         if purchase.status == Subscription.Status.PENDING:
             return Response({"code": ["This payment is still being checked. Try again in a little while."]}, status=400)
         if purchase.status != Subscription.Status.PAID:
-            return Response({"code": ["This payment wasn't approved."]}, status=400)
+            return Response({"code": ["This payment wasn't received, so the code no longer works."]}, status=400)
 
         if request.user.is_authenticated and not request.user.is_admin:
             if purchase.user_id is None:
@@ -272,7 +272,10 @@ class AdminPaymentMethodViewSet(viewsets.ModelViewSet):
 
 
 class AdminManualPaymentListView(APIView):
-    """GET /api/admin/payments/manual/?status=pending|paid|rejected|all"""
+    """GET /api/admin/payments/manual/?status=pending|paid|rejected|all
+
+    pending = unlocked but not yet checked, paid = confirmed, rejected = revoked.
+    """
 
     permission_classes = [IsAdmin]
 
@@ -280,10 +283,16 @@ class AdminManualPaymentListView(APIView):
         queryset = Subscription.objects.filter(provider=Subscription.Provider.MANUAL).select_related(
             "story", "method", "user", "reviewed_by", "proof"
         ).prefetch_related("grants").defer("proof__data")
+        manual = Subscription.objects.filter(provider=Subscription.Provider.MANUAL)
+        to_check = Q(status=Subscription.Status.PENDING) | Q(status=Subscription.Status.PAID, reviewed_at__isnull=True)
         wanted = request.query_params.get("status", "pending")
-        if wanted != "all":
+        if wanted == "pending":
+            queryset = queryset.filter(to_check)
+        elif wanted == "paid":
+            queryset = queryset.filter(status=Subscription.Status.PAID, reviewed_at__isnull=False)
+        elif wanted != "all":
             queryset = queryset.filter(status=wanted)
-        pending = Subscription.objects.filter(provider=Subscription.Provider.MANUAL, status=Subscription.Status.PENDING)
+        pending = manual.filter(to_check)
         return Response(
             {
                 "pending_count": pending.count(),
@@ -303,7 +312,7 @@ class AdminPaymentProofView(APIView):
 
 
 class AdminReviewPaymentView(APIView):
-    """POST /api/admin/payments/manual/<id>/approve/  or  .../reject/ {"note": "..."}"""
+    """POST /api/admin/payments/manual/<id>/approve/ (money arrived)  or  .../reject/ {"note": "..."} (revoke access)"""
 
     permission_classes = [IsAdmin]
     decision = None
@@ -318,12 +327,14 @@ class AdminReviewPaymentView(APIView):
             now = timezone.now()
             purchase.reviewed_by, purchase.reviewed_at = request.user, now
             purchase.admin_note = str(request.data.get("note", "")).strip()[:300]
+            was_unlocked = purchase.status == Subscription.Status.PAID
             if self.decision == "approve":
                 purchase.status, purchase.paid_at = Subscription.Status.PAID, purchase.paid_at or now
             else:
                 purchase.status = Subscription.Status.REJECTED
             purchase.save()
-            transaction.on_commit(lambda: _tell_reader(purchase))
+            if purchase.status == Subscription.Status.REJECTED or not was_unlocked:
+                transaction.on_commit(lambda: _tell_reader(purchase))
         push_admins("payments.changed", {"subscription": purchase.pk})
         return Response(AdminPurchaseSerializer(purchase).data)
 
@@ -332,13 +343,13 @@ def _tell_reader(purchase):
     story, approved = purchase.story, purchase.status == Subscription.Status.PAID
     if purchase.user_id:
         if approved:
-            notify([purchase.user_id], "payment_paid", f"Unlocked: {story.title}", "Payment confirmed. Enjoy the full story!", f"/stories/{story.slug}")
+            notify([purchase.user_id], "payment_paid", f"Unlocked: {story.title}", "Thank you for your payment. Enjoy the full story!", f"/stories/{story.slug}")
         else:
             notify(
                 [purchase.user_id],
                 "payment_rejected",
-                f"Payment not confirmed: {story.title}",
-                purchase.admin_note or "We couldn't find this transfer. Check the reference number or send us a message.",
+                f"Payment not received: {story.title}",
+                purchase.admin_note or "We couldn't find this transfer, so the story was locked again. Check the reference number or send us a message.",
                 f"/stories/{story.slug}",
             )
     if approved and purchase.payer_email:
@@ -350,12 +361,12 @@ def _tell_reader(purchase):
                 to_name=purchase.payer_name,
                 subject=f"Unlocked: {story.title}",
                 text=(
-                    f"Your payment for {story.title} is confirmed.\n\nRead it here: {link}\n\n"
+                    f"Thank you for your payment for {story.title}.\n\nRead it here: {link}\n\n"
                     f"Your access code is {purchase.access_code}. Enter it on another phone or computer to read there too "
                     f"(up to {settings.ACCESS_MAX_DEVICES} devices)."
                 ),
                 html=(
-                    f"<p>Your payment for <b>{title}</b> is confirmed. Thank you!</p>"
+                    f"<p>Thank you for your payment for <b>{title}</b>!</p>"
                     f'<p><a href="{html.escape(link)}">Start reading</a></p>'
                     f"<p>Your access code is <b style=\"font-size:20px;letter-spacing:2px\">{purchase.access_code}</b>.<br>"
                     f"Enter it on another phone or computer to read there too (up to {settings.ACCESS_MAX_DEVICES} devices).</p>"

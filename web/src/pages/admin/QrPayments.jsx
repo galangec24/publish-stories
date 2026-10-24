@@ -17,6 +17,16 @@ const STATUS = {
   rejected: 'bg-rose-500/15 text-rose-400',
 }
 
+function StatusBadge({ p }) {
+  const [tone, text] =
+    p.status === 'rejected'
+      ? [STATUS.rejected, 'revoked']
+      : p.status === 'paid' && p.reviewed_at
+        ? [STATUS.paid, 'confirmed']
+        : [STATUS.pending, 'unlocked · to check']
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}>{text}</span>
+}
+
 /** Receipt screenshot, fetched with the admin's login (it is never public). */
 function Proof({ id }) {
   const [src, setSrc] = useState(null)
@@ -39,7 +49,7 @@ function Proof({ id }) {
   )
 }
 
-/** Payments readers sent by scanning a QR. Check your GCash / bank app, then approve or reject. */
+/** QR payments. Stories unlock when the reader sends the reference; check the GCash / bank app, then Confirm or Revoke. */
 export function QrPayments() {
   const toast = useToast()
   const [status, setStatus] = useState('pending')
@@ -51,15 +61,16 @@ export function QrPayments() {
   async function review(p, decision) {
     let note = ''
     if (decision === 'reject') {
-      note = window.prompt('Reason shown to the reader (optional):', 'We could not find this transfer. Please check the reference number.')
+      note = window.prompt(
+        'Revoke access? The story locks again for this reader. Reason shown to them (optional):',
+        'We could not find this transfer. Please check the reference number.',
+      )
       if (note === null) return
-    } else if (!window.confirm(`Approve ${peso(p.amount)} from ${p.user?.first_name || p.payer_name || 'this guest'} (ref ${p.reference_number})?\nOnly approve if it arrived in your ${p.method_name}.`)) {
-      return
     }
     setBusy(p.id)
     try {
       await api.post(`admin/payments/manual/${p.id}/${decision}/`, { note })
-      toast(decision === 'approve' ? 'Approved. The reader can read the full story now.' : 'Marked as not received.')
+      toast(decision === 'approve' ? 'Confirmed. Thanks for checking!' : 'Access revoked. The story is locked again for this reader.')
       list.reload()
     } catch (e) {
       toast(e, 'error')
@@ -78,14 +89,15 @@ export function QrPayments() {
         </Link>
       </div>
       <p className="mt-1 text-sm text-muted">
-        Open your GCash or bank app, find the transfer by its reference number and amount, then approve it here.
+        Readers can read as soon as they send their reference number. Open your GCash or bank app, find the transfer by its
+        reference number, then press <b>Confirm received</b>. If it never arrived, press <b>Revoke</b> to lock the story again.
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
         {[
           ['pending', `To check${list.data ? ` (${list.data.pending_count})` : ''}`],
-          ['paid', 'Approved'],
-          ['rejected', 'Rejected'],
+          ['paid', 'Confirmed'],
+          ['rejected', 'Revoked'],
           ['all', 'All'],
         ].map(([value, label]) => (
           <button key={value} onClick={() => setStatus(value)} className={`chip ${status === value ? 'border-brand bg-brand/15' : 'border-line'}`}>
@@ -107,7 +119,7 @@ export function QrPayments() {
                 <p className="flex flex-wrap items-center gap-2">
                   <span className="font-display text-xl">{peso(p.amount)}</span>
                   <span className="text-muted">via {p.method_name || 'QR'}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS[p.status] || 'bg-surface-2 text-muted'}`}>{p.status}</span>
+                  <StatusBadge p={p} />
                 </p>
                 <p>
                   Ref <span className="font-mono font-semibold">{p.reference_number}</span> ·{' '}
@@ -125,14 +137,14 @@ export function QrPayments() {
                 {p.admin_note && <p className="text-xs text-muted">Note: {p.admin_note}</p>}
               </div>
               <div className="flex gap-2">
-                {p.status !== 'paid' && (
+                {!(p.status === 'paid' && p.reviewed_at) && (
                   <button className="btn-primary !py-2" disabled={busy === p.id} onClick={() => review(p, 'approve')}>
-                    <Check className="h-4 w-4" /> Approve
+                    <Check className="h-4 w-4" /> {p.status === 'rejected' ? 'Restore access' : 'Confirm received'}
                   </button>
                 )}
                 {p.status !== 'rejected' && (
                   <button className="btn-ghost !py-2" disabled={busy === p.id} onClick={() => review(p, 'reject')}>
-                    <X className="h-4 w-4" /> {p.status === 'paid' ? 'Revoke' : 'Not received'}
+                    <X className="h-4 w-4" /> Revoke
                   </button>
                 )}
               </div>

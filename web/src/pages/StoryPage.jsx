@@ -98,7 +98,9 @@ export function StoryPage() {
       <h2 className="mt-2 mb-8 text-3xl text-page-ink" style={{ fontFamily: titleStack(s.title_font) }}>{chapter?.title}</h2>
       {chapter?.content && <DeltaView ops={chapter.content} fontFamily={fontStack(s.font_family)} fontSize={s.font_size} />}
       {showPaywall && (
-        <QrPaywall story={s} signedIn={!!user} onUnlocked={story.reload} />
+        <p className="mt-6 flex items-center gap-2 text-sm text-muted">
+          <Lock className="h-4 w-4" /> This chapter is locked. Scan the QR below the page to keep reading.
+        </p>
       )}
     </>
   )
@@ -209,6 +211,8 @@ export function StoryPage() {
             </div>
           )}
         </ProtectedContent>
+        {/* Outside the book pages and the screenshot cover, so the QR is never split across pages or hidden. */}
+        {showPaywall && <QrPaywall story={s} signedIn={!!user} onUnlocked={story.reload} />}
         {mode === 'scroll' && (
           <div className="mt-6 flex items-center justify-between">
             <button className="btn-ghost" disabled={index === 0} onClick={() => go(index - 1)}>
