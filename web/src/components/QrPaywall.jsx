@@ -99,7 +99,9 @@ export function QrPaywall({ story, signedIn, onUnlocked }) {
               </p>
             </div>
             <p className="mt-2 text-xs text-muted">
-              {qr ? 'The amount fills in when you scan.' : `Enter ${peso(story.price)} when you pay.`}
+              {qr
+                ? `Your app shows ${peso(story.price)} when you scan. If it looks greyed out, type ${Number(story.price)}.`
+                : `Enter ${peso(story.price)} when you pay.`}
               {(method.account_name || method.account_number) && (
                 <> Pays {[method.account_name, method.account_number].filter(Boolean).join(' · ')}.</>
               )}
