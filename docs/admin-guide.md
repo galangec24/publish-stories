@@ -61,6 +61,8 @@ Use the **search box** to find a payment by reference number, name, email, story
 - **Readers & payments:** who read a paid story without paying, and open checkouts.
 - **Comments:** hide or delete comments. Your own comments show an **Admin** badge.
 - **Support inbox:** reply to readers. You can send emoji, GIFs, pictures and files.
+  - Readers without an account can write too. They show as **Guest**, with the name and email they left (if any) and roughly where they wrote from.
+  - If a guest left an email, they also get your reply by email. Otherwise they see it the next time they open the chat on the same phone or computer.
 - **Email requests:** approve or deny readers who want to change their email.
 
 ## The website itself

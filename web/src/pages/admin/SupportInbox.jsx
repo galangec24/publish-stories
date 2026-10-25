@@ -84,10 +84,11 @@ export function SupportInbox() {
                 <span className="flex items-baseline justify-between gap-2">
                   <span className={`truncate ${t.unread_for_admin ? 'font-bold' : 'font-medium'}`}>
                     {t.user.first_name} {t.user.last_name}
+                    {t.user.is_guest && <span className="ml-1.5 rounded-full bg-surface-2 px-1.5 py-px text-[10px] font-semibold text-muted">Guest</span>}
                   </span>
                   <span className="shrink-0 text-[11px] text-muted">{t.last_message_at && timeAgo(t.last_message_at)}</span>
                 </span>
-                <span className="block truncate text-xs text-muted">{t.user.email}</span>
+                <span className="block truncate text-xs text-muted">{t.user.email || (t.user.is_guest ? `No account · ${t.user.ip || 'IP unknown'}` : '')}</span>
                 <span className={`mt-0.5 block truncate text-sm ${t.unread_for_admin ? 'font-semibold text-ink' : 'text-muted'}`}>
                   {t.last_message?.from_admin ? 'You: ' : ''}
                   {previewOf(t.last_message)}
@@ -118,9 +119,16 @@ export function SupportInbox() {
                   <p className="truncate font-semibold">
                     {thread.user.first_name} {thread.user.last_name}
                   </p>
-                  <a href={`mailto:${thread.user.email}`} className="flex items-center gap-1 truncate text-xs text-brand hover:underline">
-                    <Mail className="h-3.5 w-3.5" /> {thread.user.email}
-                  </a>
+                  {thread.user.email ? (
+                    <a href={`mailto:${thread.user.email}`} className="flex items-center gap-1 truncate text-xs text-brand hover:underline">
+                      <Mail className="h-3.5 w-3.5" /> {thread.user.email}
+                    </a>
+                  ) : (
+                    <p className="text-xs text-muted">No email left. They see your reply when they open the chat on their device.</p>
+                  )}
+                  {thread.user.is_guest && (
+                    <p className="text-[11px] text-muted">Guest (no account) · wrote from {thread.user.ip || 'an unknown network'}</p>
+                  )}
                 </div>
               </header>
               <div ref={list} className="flex-1 space-y-2 overflow-y-auto bg-bg-2/40 p-4">

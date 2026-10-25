@@ -29,7 +29,7 @@ The website is a static build on **Firebase Hosting**: HTML is never cached, and
 | `catalog` | Genres, columns, stories, chapters (Quill Delta JSON), story images, the paywall, views and readers, likes, comments, ratings and reading progress, search suggestions, About page, imports |
 | `payments` | Payment methods (QR codes), purchases (`Subscription`), receipts, access grants, PayMongo checkout and webhook, My purchases, sales report |
 | `notifications` | Notification rows, plus the WebSocket consumer that pushes them live |
-| `support` | One support conversation per reader, messages with GIFs and attachments, GIF search |
+| `support` | One support conversation per reader or per guest device, messages with GIFs and attachments, GIF search |
 | `translations` | Cached page translation (Google Cloud Translation, MyMemory fallback) |
 | `audit` | Middleware that records every successful admin change in the Activity log |
 
@@ -43,7 +43,7 @@ The website is a static build on **Firebase Hosting**: HTML is never cached, and
 - **Subscription**: one purchase. `provider` is `manual` (QR transfer) or `paymongo`; `status` is pending, paid, rejected, failed or expired; plus `reference_number`, `access_code` and review fields.
 - **AccessGrant**: a device allowed to read a purchase, and the network it was unlocked on (both hashed).
 - **PaymentMethod**: a QR code readers scan, with its decoded `qr_payload`.
-- **Conversation / Message**: the support chat. Attachments are stored in Supabase Storage, or in `StoredFile` when Storage isn't configured.
+- **Conversation / Message**: the support chat. A conversation belongs to an account, or to a guest's device (`guest_key`, hashed), with an optional name and email and a partly hidden IP for the admin. The IP is never used to find a thread, because people on the same network must not see each other's messages. When a guest signs in on that device, their thread moves into the account. Attachments are stored in Supabase Storage, or in `StoredFile` when Storage isn't configured.
 - **AdminLog**: the Activity log.
 
 ## How a story is served

@@ -47,8 +47,9 @@ class SupportChatTests(APITestCase):
         self.client.force_authenticate(self.reader)
         self.assertEqual(self.client.get("/api/admin/support/").status_code, 403)
 
-    def test_guests_must_sign_in(self):
-        self.assertEqual(self.client.post("/api/support/messages/", {"body": "hi"}, format="json").status_code, 401)
+    def test_guests_need_a_device_id(self):
+        # Without the browser's X-Viewer-Id there is nothing to keep the conversation by.
+        self.assertEqual(self.client.post("/api/support/messages/", {"body": "hi"}, format="json").status_code, 400)
 
     def test_empty_message_rejected(self):
         self.client.force_authenticate(self.reader)

@@ -187,6 +187,7 @@ REST_FRAMEWORK = {
         "views": "300/hour",
         "translate": "600/hour",
         "chat": "60/min",
+        "chat_guest": "20/hour",  # per IP: guests can't be told apart otherwise
         "comment": "10/min",
         "payment_submit": "6/hour",
         "access_claim": "20/hour",

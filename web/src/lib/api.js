@@ -156,7 +156,10 @@ export const api = {
   upload: (path, form, method = 'POST') => send(method, path, { form }),
   /** Signed-in download (e.g. admin-only images) → an object URL for <img src>. */
   blobUrl: async (path, retry = true) => {
-    const response = await fetch(url(path), { headers: store.access ? { Authorization: `Bearer ${store.access}` } : {} })
+    const headers = store.access ? { Authorization: `Bearer ${store.access}` } : {}
+    const vid = viewerId()
+    if (vid) headers['X-Viewer-Id'] = vid // guests' own chat files
+    const response = await fetch(url(path), { headers })
     if (response.status === 401 && retry && (await refreshAccess())) return api.blobUrl(path, false)
     if (!response.ok) throw new ApiError(response.status, null)
     return URL.createObjectURL(await response.blob())

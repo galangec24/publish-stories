@@ -19,7 +19,7 @@ def is_gif_url(url):
 class GifSearchView(APIView):
     """GET /api/support/gifs/?q=happy → {"enabled": bool, "results": [{id, url, preview, width, height}]}"""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "chat"
 

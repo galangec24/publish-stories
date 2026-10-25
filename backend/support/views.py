@@ -1,5 +1,8 @@
+import ipaddress
+import logging
 import os
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import F
 from django.http import HttpResponse
@@ -11,14 +14,17 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from accounts.brevo import EmailSendError, send_email
 from accounts.permissions import IsAdmin
 from notifications.realtime import push_admins, push_user
+from payments.access import client_ip, device_key
 from notifications.service import first_name, notify, notify_admins
 
 from . import storage
 from .gifs import is_gif_url
 from .models import Conversation, Message
 
+logger = logging.getLogger(__name__)
 HISTORY = 200
 # Pictures, PDFs and everyday documents. Anything else is refused.
 FILE_TYPES = {
@@ -82,22 +88,36 @@ def serialize_message(message):
             else None
         ),
         "from_admin": message.from_admin,
-        "sender_name": "Support" if message.from_admin else (first_name(sender) if sender else "Reader"),
+        "sender_name": "Support" if message.from_admin else (first_name(sender) if sender else (message.conversation.guest_name or "Guest")),
         "created_at": message.created_at.isoformat(),
     }
 
 
 def serialize_conversation(conversation, last=None):
     user = conversation.user
-    return {
-        "id": conversation.id,
-        "user": {
+    person = (
+        {
             "id": user.id,
             "first_name": first_name(user),
             "last_name": user.last_name,
             "email": user.email,
             "avatar_url": user.avatar_url,
-        },
+            "is_guest": False,
+        }
+        if user
+        else {
+            "id": None,
+            "first_name": conversation.guest_name or "Guest",
+            "last_name": "",
+            "email": conversation.guest_email,
+            "avatar_url": "",
+            "is_guest": True,
+            "ip": conversation.guest_ip,
+        }
+    )
+    return {
+        "id": conversation.id,
+        "user": person,
         "unread_for_admin": conversation.unread_for_admin,
         "unread_for_user": conversation.unread_for_user,
         "last_message_at": conversation.last_message_at.isoformat() if conversation.last_message_at else None,
@@ -106,51 +126,134 @@ def serialize_conversation(conversation, last=None):
 
 
 def history(conversation):
-    messages = list(conversation.messages.select_related("sender").order_by("-id")[:HISTORY])
+    messages = list(conversation.messages.select_related("sender", "conversation").order_by("-id")[:HISTORY])
     return [serialize_message(m) for m in reversed(messages)]
 
 
-class MyConversationView(APIView):
-    """GET /api/support/ → my thread (opening it marks support replies as read)."""
+def masked_ip(request):
+    """The reader's IP with the last part hidden ("49.145.10.•"), shown to admins only."""
+    try:
+        ip = ipaddress.ip_address(client_ip(request))
+    except ValueError:
+        return ""
+    if ip.version == 4:
+        return ".".join(str(ip).split(".")[:3]) + ".•"
+    return ":".join(ip.exploded.split(":")[:4]) + ":•"
 
-    permission_classes = [permissions.IsAuthenticated]
+
+def conversation_for(request, create=False, lock=False):
+    """This reader's thread: by account, or by device for guests.
+
+    A guest thread from this device moves into the account when the reader signs in.
+    The IP is never used to find a thread: many people share one (mobile data, a home),
+    and they must not see each other's messages.
+    """
+    queryset = Conversation.objects.select_for_update() if lock else Conversation.objects
+    device = device_key(request)
+    if request.user.is_authenticated:
+        conversation = queryset.filter(user=request.user).first()
+        guest = queryset.filter(user__isnull=True, guest_key=device).first() if device else None
+        if guest:
+            if conversation is None:
+                guest.user, guest.guest_key = request.user, ""
+                guest.save(update_fields=["user", "guest_key"])
+                conversation = guest
+            else:
+                guest.messages.update(conversation=conversation)
+                Conversation.objects.filter(pk=conversation.pk).update(
+                    unread_for_admin=F("unread_for_admin") + guest.unread_for_admin,
+                    last_message_at=max(filter(None, [conversation.last_message_at, guest.last_message_at]), default=None),
+                )
+                guest.delete()
+                conversation.refresh_from_db()
+        if conversation is None and create:
+            conversation = Conversation.objects.create(user=request.user)
+        return conversation
+    if not device:
+        return None
+    conversation = queryset.filter(user__isnull=True, guest_key=device).first()
+    if conversation is None and create:
+        conversation = Conversation.objects.create(guest_key=device, guest_ip=masked_ip(request))
+    return conversation
+
+
+class GuestDetails(serializers.Serializer):
+    name = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    email = serializers.EmailField(required=False, allow_blank=True)
+
+
+class MyConversationView(APIView):
+    """GET /api/support/ → my thread (opening it marks support replies as read).
+
+    Works without an account (the browser's X-Viewer-Id identifies the device).
+    PATCH {name, email} lets a guest say how to reach them.
+    """
+
+    permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        conversation, _ = Conversation.objects.get_or_create(user=request.user)
+        conversation = conversation_for(request, create=request.user.is_authenticated)
+        if conversation is None:
+            if not request.user.is_authenticated and not device_key(request):
+                return Response({"detail": "Allow this site to store data so we can keep your conversation."}, status=400)
+            return Response({"id": None, "messages": [], "user": {"is_guest": True, "first_name": "", "email": ""}})
         if conversation.unread_for_user:
             Conversation.objects.filter(pk=conversation.pk).update(unread_for_user=0)
             conversation.unread_for_user = 0
         return Response({**serialize_conversation(conversation), "messages": history(conversation)})
 
+    def patch(self, request):
+        if request.user.is_authenticated:
+            return Response({"detail": "Your account details are used."}, status=400)
+        data = GuestDetails(data=request.data)
+        data.is_valid(raise_exception=True)
+        conversation = conversation_for(request, create=True)
+        if conversation is None:
+            return Response({"detail": "Allow this site to store data so we can keep your conversation."}, status=400)
+        conversation.guest_name = data.validated_data.get("name", conversation.guest_name).strip()
+        conversation.guest_email = data.validated_data.get("email", conversation.guest_email).strip()
+        conversation.save(update_fields=["guest_name", "guest_email"])
+        return Response(serialize_conversation(conversation))
+
 
 class MySendView(APIView):
-    """POST /api/support/messages/ {body} → message; pushed to every admin instantly."""
+    """POST /api/support/messages/ {body, gif_url?, file?} → message; pushed to every admin instantly."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "chat"
+
+    @property
+    def throttle_scope(self):
+        return "chat" if self.request.user.is_authenticated else "chat_guest"
 
     def post(self, request):
+        if not request.user.is_authenticated and not device_key(request):
+            return Response({"detail": "Allow this site to store data so we can keep your conversation."}, status=400)
         fields = message_fields(request)
+        sender = request.user if request.user.is_authenticated else None
         with transaction.atomic():
-            conversation, _ = Conversation.objects.select_for_update().get_or_create(user=request.user)
+            conversation = conversation_for(request, create=True, lock=True)
+            if sender is None:
+                conversation.guest_ip = masked_ip(request)  # where they last wrote from, for the admin
+                conversation.save(update_fields=["guest_ip"])
             first_unread = conversation.unread_for_admin == 0
-            message = Message.objects.create(conversation=conversation, sender=request.user, **fields)
+            message = Message.objects.create(conversation=conversation, sender=sender, **fields)
             Conversation.objects.filter(pk=conversation.pk).update(
                 last_message_at=message.created_at, unread_for_admin=F("unread_for_admin") + 1
             )
             conversation.refresh_from_db()
             payload = serialize_conversation(conversation, message)
             push_admins("support.message", payload)
-            push_user(request.user.pk, "support.message", payload)
+            if sender:
+                push_user(sender.pk, "support.message", payload)
             if first_unread:
-                notify_admins(
-                    "support_message",
-                    f"New message from {first_name(request.user)} ({request.user.email})",
-                    preview_text(message),
-                    "/admin/support",
+                who = (
+                    f"{first_name(sender)} ({sender.email})"
+                    if sender
+                    else f"guest {conversation.guest_name or ''}{f' ({conversation.guest_email})' if conversation.guest_email else ''}".strip()
                 )
+                notify_admins("support_message", f"New message from {who}", preview_text(message), "/admin/support")
         return Response(serialize_message(message), status=201)
 
 
@@ -202,21 +305,45 @@ class AdminReplyView(APIView):
             )
             conversation.refresh_from_db()
             payload = serialize_conversation(conversation, message)
-            push_user(conversation.user_id, "support.message", payload)
+            if conversation.user_id:
+                push_user(conversation.user_id, "support.message", payload)
             push_admins("support.message", payload)
-            if first_unread:
+            if first_unread and conversation.user_id:
                 notify([conversation.user_id], "support_reply", "Support replied to you", preview_text(message), "?chat=open")
+            elif first_unread and conversation.guest_email:
+                transaction.on_commit(lambda: email_guest(conversation, message))
         return Response(serialize_message(message), status=201)
+
+
+def email_guest(conversation, message):
+    link = f"{settings.FRONTEND_BASE_URL}/?chat=open"
+    try:
+        send_email(
+            to_email=conversation.guest_email,
+            to_name=conversation.guest_name,
+            subject="Publish Stories support replied to you",
+            text=f"{preview_text(message)}\n\nOpen the chat on the same phone or computer to reply: {link}",
+            html=(
+                f"<p>{preview_text(message)}</p>"
+                f'<p><a href="{link}">Open the chat</a> on the same phone or computer you wrote from to reply.</p>'
+            ),
+        )
+    except EmailSendError:
+        logger.warning("Couldn't email guest conversation %s", conversation.pk)
 
 
 class FileView(APIView):
     """GET /api/support/files/<message id>/ - the attachment, for that conversation's reader or an admin."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
 
     def get(self, request, pk):
         message = get_object_or_404(Message.objects.select_related("conversation"), pk=pk)
-        if not message.file_key or not (request.user.is_admin or message.conversation.user_id == request.user.pk):
+        conversation, user, device = message.conversation, request.user, device_key(request)
+        allowed = (user.is_authenticated and (user.is_admin or conversation.user_id == user.pk)) or (
+            conversation.user_id is None and device and conversation.guest_key == device
+        )
+        if not message.file_key or not allowed:
             return Response({"detail": "Not found."}, status=404)
         try:
             data = storage.load(message.file_key)

@@ -1,5 +1,5 @@
-import { Headset, LogIn, MessageCircle, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { Headset, LogIn, MessageCircle, Pencil, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { api } from '../lib/api'
@@ -9,34 +9,135 @@ import { onLiveEvent, useLive } from '../realtime/LiveProvider'
 import { ChatComposer, MessageContent, sendChatMessage } from './ChatExtras'
 import { useToast } from './ui'
 
-/** Floating "Messenger-style" support chat for readers. Replies arrive live. */
+const POLL_OPEN_MS = 10_000
+const POLL_CLOSED_MS = 60_000
+
+function readCache(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || 'null')
+  } catch {
+    return null
+  }
+}
+
+function writeCache(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    /* storage full or blocked: the chat still works, just not instantly next time */
+  }
+}
+
+/** Guests can leave a name and email so support can reply by email too. */
+function GuestDetails({ details, onSaved }) {
+  const toast = useToast()
+  const [open, setOpen] = useState(!details.first_name && !details.email)
+  const [form, setForm] = useState({ name: details.first_name === 'Guest' ? '' : details.first_name || '', email: details.email || '' })
+  const [busy, setBusy] = useState(false)
+
+  async function save(e) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      onSaved(await api.patch('support/', form))
+      setOpen(false)
+      toast('Thanks! We’ll also reply to your email.')
+    } catch (err) {
+      toast(err, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="flex w-full items-center gap-1.5 border-b border-line px-3 py-1.5 text-left text-xs text-muted hover:text-ink">
+        <Pencil className="h-3 w-3" />
+        {details.email ? `Replies also go to ${details.email}` : 'Add your email to get replies there too'}
+      </button>
+    )
+  }
+  return (
+    <form onSubmit={save} className="space-y-2 border-b border-line bg-surface-2/50 p-3 text-xs">
+      <p className="text-muted">
+        No account needed. How can we reach you? <span className="opacity-70">(optional)</span>
+      </p>
+      <div className="flex gap-2">
+        <input className="input !py-1.5 text-sm" placeholder="Your name" maxLength={80} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <input className="input !py-1.5 text-sm" type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+      </div>
+      <div className="flex justify-between gap-2">
+        <Link to="/login" className="inline-flex items-center gap-1 text-brand hover:underline">
+          <LogIn className="h-3 w-3" /> or sign in
+        </Link>
+        <span className="flex gap-2">
+          <button type="button" className="text-muted hover:text-ink" onClick={() => setOpen(false)}>
+            Skip
+          </button>
+          <button className="btn-primary !px-3 !py-1 text-xs" disabled={busy}>
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </span>
+      </div>
+    </form>
+  )
+}
+
+/**
+ * Floating "Messenger-style" support chat, for signed-in readers and guests alike.
+ * Guests are recognised by this device; the last messages are cached so the chat opens instantly.
+ */
 export function SupportChat() {
   const { user } = useAuth()
   const { chatOpen: open, setChatOpen: setOpen } = useLive()
   const toast = useToast()
-  const [messages, setMessages] = useState(null)
+  const cacheKey = `support-cache:${user?.id || 'guest'}`
+  const [thread, setThread] = useState(() => readCache(cacheKey))
   const [badge, setBadge] = useState(0)
   const list = useRef(null)
   const openRef = useRef(open)
   openRef.current = open
+  const lastSeen = useRef(null)
 
-  // Load (and mark read) when opened.
+  useEffect(() => setThread(readCache(cacheKey)), [cacheKey])
   useEffect(() => {
-    if (!open || !user) return
-    setBadge(0)
-    api
-      .get('support/')
-      .then((c) => setMessages(c.messages))
-      .catch((e) => toast(e, 'error'))
-  }, [open, user, toast])
+    if (thread) writeCache(cacheKey, { ...thread, messages: thread.messages.slice(-100) })
+  }, [thread, cacheKey])
 
-  // Live messages for my thread.
+  const load = useCallback(
+    (quiet = false) =>
+      api
+        .get('support/')
+        .then((t) => {
+          const newest = t.messages[t.messages.length - 1]
+          if (!openRef.current && newest?.from_admin && lastSeen.current && newest.id !== lastSeen.current) setBadge((b) => b + 1)
+          if (newest) lastSeen.current = newest.id
+          setThread(t)
+        })
+        .catch((e) => !quiet && toast(e, 'error')),
+    [toast],
+  )
+
+  // Opening the chat loads (and marks read) the latest messages.
+  useEffect(() => {
+    if (!open) return
+    setBadge(0)
+    load()
+  }, [open, user?.id, load])
+
+  // Signed-in readers get replies over the live connection; guests check every few seconds.
+  useEffect(() => {
+    if (user) return
+    const timer = setInterval(() => load(true), open ? POLL_OPEN_MS : POLL_CLOSED_MS)
+    return () => clearInterval(timer)
+  }, [user, open, load])
+
   useEffect(
     () =>
       onLiveEvent('support.message', (conversation) => {
         const m = conversation.last_message
         if (!m) return
-        setMessages((list) => (list && !list.some((x) => x.id === m.id) ? [...list, m] : list))
+        setThread((t) => (t && !t.messages.some((x) => x.id === m.id) ? { ...t, messages: [...t.messages, m] } : t))
         if (m.from_admin && !openRef.current) setBadge((b) => b + 1)
       }),
     [],
@@ -44,12 +145,19 @@ export function SupportChat() {
 
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' })
-  }, [messages, open])
+  }, [thread?.messages?.length, open])
 
   async function send(message) {
     const m = await sendChatMessage('support/messages/', message)
-    setMessages((list) => (list?.some((x) => x.id === m.id) ? list : [...(list || []), m]))
+    lastSeen.current = m.id
+    setThread((t) => {
+      const base = t || { messages: [], user: { is_guest: !user } }
+      return base.messages.some((x) => x.id === m.id) ? base : { ...base, messages: [...base.messages, m] }
+    })
   }
+
+  const messages = thread?.messages ?? null
+  const name = user?.first_name || (thread?.user?.first_name && thread.user.first_name !== 'Guest' ? thread.user.first_name : '')
 
   return (
     <>
@@ -84,47 +192,32 @@ export function SupportChat() {
             </button>
           </header>
 
-          {!user ? (
-            <div className="grid flex-1 place-items-center p-6 text-center">
-              <div>
-                <MessageCircle className="mx-auto h-10 w-10 text-muted" />
-                <p className="mt-3 font-semibold">Sign in to chat with us</p>
-                <p className="mt-1 text-sm text-muted">So we can reply to your account and email.</p>
-                <Link to="/login" onClick={() => setOpen(false)} className="btn-primary mt-4">
-                  <LogIn className="h-4 w-4" /> Sign in
-                </Link>
+          {!user && thread && <GuestDetails details={thread.user || {}} onSaved={(t) => setThread((old) => ({ ...old, ...t, messages: old?.messages || [] }))} />}
+
+          <div ref={list} className="flex-1 space-y-2 overflow-y-auto bg-bg-2/40 px-3 py-4">
+            {messages === null && <p className="py-10 text-center text-sm text-muted">Loading…</p>}
+            {messages?.length === 0 && (
+              <div className="py-8 text-center text-sm text-muted">
+                <p className="font-medium text-ink">Hi {name || 'there'}!</p>
+                <p className="mt-1">Questions about a story, a payment or your account? Send us a message. No account needed.</p>
               </div>
-            </div>
-          ) : (
-            <>
-              <div ref={list} className="flex-1 space-y-2 overflow-y-auto bg-bg-2/40 px-3 py-4">
-                {messages === null && <p className="py-10 text-center text-sm text-muted">Loading…</p>}
-                {messages?.length === 0 && (
-                  <div className="py-8 text-center text-sm text-muted">
-                    <p className="font-medium text-ink">Hi {user.first_name || 'there'}!</p>
-                    <p className="mt-1">Questions about a story, payment or your account? Send us a message.</p>
-                  </div>
-                )}
-                {messages?.map((m) => (
-                  <div key={m.id} className={`flex ${m.from_admin ? 'justify-start' : 'justify-end'}`}>
-                    <div
-                      className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${
-                        m.from_admin ? 'rounded-bl-md bg-surface-2' : 'rounded-br-md bg-brand text-white'
-                      }`}
-                      title={new Date(m.created_at).toLocaleString()}
-                    >
-                      <MessageContent m={m} mine={!m.from_admin} />
-                      <span className={`mt-0.5 block text-[10px] ${m.from_admin ? 'text-muted' : 'text-white/70'}`}>
-                        {m.from_admin ? 'Support · ' : ''}
-                        {timeAgo(m.created_at)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+            )}
+            {messages?.map((m) => (
+              <div key={m.id} className={`flex ${m.from_admin ? 'justify-start' : 'justify-end'}`}>
+                <div
+                  className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${m.from_admin ? 'rounded-bl-md bg-surface-2' : 'rounded-br-md bg-brand text-white'}`}
+                  title={new Date(m.created_at).toLocaleString()}
+                >
+                  <MessageContent m={m} mine={!m.from_admin} />
+                  <span className={`mt-0.5 block text-[10px] ${m.from_admin ? 'text-muted' : 'text-white/70'}`}>
+                    {m.from_admin ? 'Support · ' : ''}
+                    {timeAgo(m.created_at)}
+                  </span>
+                </div>
               </div>
-              <ChatComposer onSend={send} />
-            </>
-          )}
+            ))}
+          </div>
+          <ChatComposer onSend={send} />
         </section>
       )}
     </>
