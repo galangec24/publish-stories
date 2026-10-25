@@ -100,7 +100,9 @@ export function Book3D({ story, size = 'md' }) {
           </div>
         </div>
       </div>
-      <div className="mt-5 pr-2">
+      {/* the shelf the book stands on */}
+      <div className="mt-3 h-2 rounded-full bg-gradient-to-b from-line to-transparent opacity-80" />
+      <div className="mt-2 pr-2">
         <p className="line-clamp-2 text-sm leading-snug font-semibold transition group-hover:text-accent">{story.title}</p>
         {story.author_name && <p className="truncate text-xs text-muted">{story.author_name}</p>}
         <p className="mt-1 flex items-center gap-1.5 text-xs">
@@ -144,14 +146,11 @@ export function Shelf({ title, subtitle, stories, link }) {
           </a>
         )}
       </div>
-      {/* Wooden-shelf ledge under the books */}
-      <div className="relative">
-        <div className="flex gap-6 overflow-x-auto px-6 pt-4 pb-8 [scrollbar-width:thin]">
-          {stories.map((s) => (
-            <Book3D key={s.id} story={s} />
-          ))}
-        </div>
-        <div className="pointer-events-none absolute inset-x-0 bottom-14 h-3 rounded-full bg-gradient-to-b from-line to-transparent opacity-70" />
+      {/* Each book draws its own shelf under it, so the ledge never crosses the text. */}
+      <div className="flex gap-6 overflow-x-auto px-6 pt-4 pb-8 [scrollbar-width:thin]">
+        {stories.map((s) => (
+          <Book3D key={s.id} story={s} />
+        ))}
       </div>
     </section>
   )

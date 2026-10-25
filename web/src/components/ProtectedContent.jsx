@@ -8,7 +8,11 @@ import { useEffect, useState } from 'react'
  *    Win+Shift+S opens Snipping Tool, which takes focus, so the snip shows the
  *    cover, the same as if the reader had switched to another tab;
  *  - Print Screen / macOS screenshot shortcuts trigger the cover and overwrite the clipboard;
- *  - printing, saving, copying, right-click and text selection are disabled;
+ *  - printing, saving, copying, right-click, long-press and text selection are disabled;
+ *  - phones: covered when the page goes to the background (before the app-switcher
+ *    snapshot) and on a three-finger touch, the screenshot gesture on many Android phones.
+ * Mobile browsers give no signal for iPhone screenshots or screen recording, so those can't
+ * be stopped here; the Android app (frontend/lib/security) blocks them with FLAG_SECURE.
  * The real protection is server-side: locked readers never receive the full text.
  */
 export function ProtectedContent({ children }) {
@@ -34,10 +38,22 @@ export function ProtectedContent({ children }) {
       if (screenshot || saveOrPrint) e.preventDefault()
     }
     const block = (e) => e.preventDefault()
+    // Three fingers on the screen: many Android phones take a screenshot with that swipe.
+    const onTouch = (e) => {
+      if (e.touches.length >= 3) {
+        hide()
+        clearTimeout(timer)
+        timer = setTimeout(show, 2500)
+      }
+    }
 
     window.addEventListener('blur', hide)
     window.addEventListener('focus', show)
     document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pagehide', hide) // leaving / app switcher snapshot
+    document.addEventListener('freeze', hide)
+    window.addEventListener('pageshow', show)
+    document.addEventListener('touchstart', onTouch, { passive: true })
     window.addEventListener('keydown', onKey)
     window.addEventListener('keyup', onKey) // browsers report PrintScreen only on keyup
     document.addEventListener('contextmenu', block)
@@ -49,6 +65,10 @@ export function ProtectedContent({ children }) {
       window.removeEventListener('blur', hide)
       window.removeEventListener('focus', show)
       document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pagehide', hide)
+      document.removeEventListener('freeze', hide)
+      window.removeEventListener('pageshow', show)
+      document.removeEventListener('touchstart', onTouch)
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('keyup', onKey)
       document.removeEventListener('contextmenu', block)

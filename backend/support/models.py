@@ -37,6 +37,9 @@ class Message(models.Model):
     gif_url = models.URLField(max_length=500, blank=True)
     # Messenger-style reply: the message this one answers (same conversation).
     reply_to = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    # Messenger-style reactions: one from the reader's side, one from support.
+    reader_reaction = models.CharField(max_length=16, blank=True)
+    admin_reaction = models.CharField(max_length=16, blank=True)
     # A file sent with the message; the bytes live in Supabase Storage (or StoredFile).
     file_key = models.CharField(max_length=200, blank=True)
     file_name = models.CharField(max_length=200, blank=True)

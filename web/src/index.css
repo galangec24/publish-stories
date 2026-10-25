@@ -77,13 +77,28 @@ body {
   color: var(--ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  /* Long words and links wrap instead of pushing the page wider than a phone. */
+  overflow-wrap: break-word;
+}
+/* Nothing may make the page scroll sideways on phones. `clip` keeps sticky headers working. */
+html {
+  overflow-x: hidden;
+}
+body {
+  overflow-x: clip;
+}
+h1,
+h2,
+h3 {
+  overflow-wrap: anywhere;
 }
 
 /* Soft aurora behind every page, gives depth to the 3D cards. */
 body::before {
   content: "";
   position: fixed;
-  inset: -20% -10% auto -10%;
+  /* Kept inside the screen: a fixed layer wider than the viewport makes iPhones scroll sideways. */
+  inset: -20% 0 auto 0;
   height: 70vh;
   background: radial-gradient(60% 60% at 20% 30%, var(--glow), transparent 70%),
     radial-gradient(40% 50% at 80% 10%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);

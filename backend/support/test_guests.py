@@ -172,3 +172,38 @@ class ReplyAndUnreadTests(APITestCase):
 
         back = self.client.post("/api/support/messages/", {"body": "Thanks!", "reply_to": reply["id"]}, format="json", **PHONE).data
         self.assertEqual(back["reply_to"]["sender_name"], "Support")
+
+
+class ReactionsSeenAndCountsTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.admin = User.objects.create_user(email="admin@example.com", password="x", is_admin=True)
+
+    def test_reactions_both_sides_and_toggle(self):
+        mine = self.client.post("/api/support/messages/", {"body": "Hi"}, format="json", **PHONE).data
+        url = f"/api/support/messages/{mine['id']}/react/"
+        self.assertEqual(self.client.post(url, {"emoji": "❤️"}, format="json", **PHONE).data["reactions"], {"reader": "❤️", "admin": ""})
+        self.assertEqual(self.client.post(url, {"emoji": "🍕"}, format="json", **PHONE).status_code, 400)
+        self.assertEqual(self.client.post(url, {"emoji": "❤️"}, format="json", **SAME_WIFI).status_code, 404)  # not their thread
+        self.client.force_authenticate(self.admin)
+        both = self.client.post(f"/api/admin/support/messages/{mine['id']}/react/", {"emoji": "👍"}, format="json").data
+        self.assertEqual(both["reactions"], {"reader": "❤️", "admin": "👍"})
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.post(url, {"emoji": "❤️"}, format="json", **PHONE).data["reactions"]["reader"], "")  # tap again: removed
+
+    def test_every_message_counts(self):
+        reader = User.objects.create_user(email="r@example.com", password="x", first_name="Rey")
+        self.client.force_authenticate(reader)
+        self.client.post("/api/support/messages/", {"body": "One"}, format="json")
+        self.client.post("/api/support/messages/", {"body": "Two"}, format="json")
+        self.assertEqual(self.admin.notifications.filter(kind="support_message", is_read=False).count(), 2)
+        conversation = Conversation.objects.get()
+        self.client.force_authenticate(self.admin)
+        self.assertEqual(self.client.get("/api/admin/support/").data["unread_total"], 2)
+        for body in ("A", "B"):
+            self.client.post(f"/api/admin/support/{conversation.id}/messages/", {"body": body}, format="json")
+        self.assertEqual(reader.notifications.filter(kind="support_reply", is_read=False).count(), 2)
+        self.client.force_authenticate(reader)
+        self.assertEqual(self.client.get("/api/support/unread/").data["unread"], 2)
+        # Seen: the admin opened the thread, so the reader's side shows nothing unread for support.
+        self.assertEqual(self.client.get("/api/support/").data["unread_for_admin"], 0)

@@ -17,9 +17,9 @@ class SupportChatTests(APITestCase):
         sent = self.client.post("/api/support/messages/", {"body": "Hi, my payment is stuck"}, format="json")
         self.assertEqual(sent.status_code, 201)
         self.client.post("/api/support/messages/", {"body": "Order for Ang Diwata"}, format="json")
-        # Admins get one notification per unread streak, not one per message.
-        self.assertEqual(self.admin.notifications.count(), 1)
-        self.assertIn("juan@example.com", self.admin.notifications.get().title)
+        # Every message counts, so two messages show as two.
+        self.assertEqual(self.admin.notifications.count(), 2)
+        self.assertIn("juan@example.com", self.admin.notifications.first().title)
 
         self.client.force_authenticate(self.admin)
         inbox = self.client.get("/api/admin/support/").data

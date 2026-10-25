@@ -1,7 +1,7 @@
 import { ArrowLeft, Inbox, Mail } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { ChatBubble, ChatComposer, previewOf, sendChatMessage, useJumpToMessage } from '../../components/ChatExtras'
+import { ChatBubble, ChatComposer, previewOf, replaceMessage, sendChatMessage, useJumpToMessage } from '../../components/ChatExtras'
 import { Avatar } from '../../components/HeaderMenus'
 import { Spinner, useToast } from '../../components/ui'
 import { api } from '../../lib/api'
@@ -61,8 +61,33 @@ export function SupportInbox() {
 
   async function reply(message) {
     const m = await sendChatMessage(`admin/support/${activeId}/messages/`, message)
-    setThread((t) => (t.messages.some((x) => x.id === m.id) ? t : { ...t, messages: [...t.messages, m] }))
+    setThread((t) =>
+      t.messages.some((x) => x.id === m.id) ? t : { ...t, unread_for_user: (t.unread_for_user || 0) + 1, messages: [...t.messages, m] },
+    )
   }
+
+  async function reactTo(m, emoji) {
+    try {
+      const updated = await api.post(`admin/support/messages/${m.id}/react/`, { emoji })
+      setThread((t) => ({ ...t, messages: replaceMessage(t.messages, updated) }))
+    } catch (e) {
+      toast(e, 'error')
+    }
+  }
+
+  // The reader reacted, or opened (saw) their chat.
+  useEffect(() => {
+    const offReaction = onLiveEvent('support.reaction', ({ conversation, message }) =>
+      setThread((t) => (t && t.id === conversation ? { ...t, messages: replaceMessage(t.messages, message) } : t)),
+    )
+    const offSeen = onLiveEvent('support.seen', ({ id, by }) =>
+      setThread((t) => (t && t.id === id && by === 'reader' ? { ...t, unread_for_user: 0 } : t)),
+    )
+    return () => {
+      offReaction()
+      offSeen()
+    }
+  }, [])
 
   if (!threads) return <Spinner />
 
@@ -132,15 +157,18 @@ export function SupportInbox() {
                 </div>
               </header>
               <div ref={list} className="flex-1 space-y-2 overflow-y-auto bg-bg-2/40 p-4">
-                {thread.messages.map((m) => (
+                {thread.messages.map((m, i) => (
                   <ChatBubble
                     key={m.id}
                     m={m}
                     mine={m.from_admin}
+                    side="admin"
                     onReply={setReplyTo}
+                    onReact={reactTo}
                     onJump={jumpTo}
                     highlighted={highlighted === m.id}
                     label={`${m.from_admin ? '' : `${m.sender_name} · `}${timeAgo(m.created_at)}`}
+                    status={i === thread.messages.length - 1 && m.from_admin ? (thread.unread_for_user ? 'Sent' : 'Seen ✓✓') : null}
                   />
                 ))}
               </div>

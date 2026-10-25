@@ -110,31 +110,87 @@ export function MessageContent({ m, mine, onJump }) {
  * One chat message, Messenger-style: hover (or tap) for Reply; quotes jump to the original.
  * `mine` puts it on the right, in the brand colour.
  */
-export function ChatBubble({ m, mine, onReply, onJump, label, highlighted = false }) {
+export const REACTIONS = ['❤️', '😆', '😮', '😢', '😡', '👍']
+
+/**
+ * One chat message, Messenger-style: Reply and React on hover (or tap the icons on a phone),
+ * quotes that jump to the original, reactions under the bubble and an optional "Seen" mark.
+ * `side` is who is looking ("reader" or "admin"), so their own reaction is highlighted.
+ */
+export function ChatBubble({ m, mine, side, onReply, onReact, onJump, label, highlighted = false, status = null }) {
+  const [picking, setPicking] = useState(false)
+  const box = useRef(null)
+  const reactions = [m.reactions?.reader, m.reactions?.admin].filter(Boolean)
+  const myReaction = m.reactions?.[side] || ''
+
+  useEffect(() => {
+    if (!picking) return
+    const close = (e) => !box.current?.contains(e.target) && setPicking(false)
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [picking])
+
+  const action = 'rounded-full p-1.5 text-muted opacity-60 transition hover:bg-surface-2 hover:text-ink sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100'
   return (
-    <div id={`msg-${m.id}`} className={`group flex items-center gap-1 ${mine ? 'flex-row-reverse' : ''}`}>
-      <div
-        className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm transition ${
-          mine ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md bg-surface-2'
-        } ${highlighted ? 'ring-2 ring-accent' : ''}`}
-        title={new Date(m.created_at).toLocaleString()}
-      >
-        <MessageContent m={m} mine={mine} onJump={onJump} />
-        <span className={`mt-0.5 block text-[10px] ${mine ? 'text-white/70' : 'text-muted'}`}>{label}</span>
+    <div id={`msg-${m.id}`} className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
+      <div ref={box} className={`group relative flex max-w-full items-center gap-0.5 ${mine ? 'flex-row-reverse' : ''}`}>
+        <div className={`relative max-w-[78vw] sm:max-w-[80%] ${reactions.length ? 'mb-3' : ''}`}>
+          <div
+            className={`rounded-2xl px-3.5 py-2 text-sm break-words transition ${
+              mine ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md bg-surface-2'
+            } ${highlighted ? 'ring-2 ring-accent' : ''}`}
+            title={new Date(m.created_at).toLocaleString()}
+          >
+            <MessageContent m={m} mine={mine} onJump={onJump} />
+            <span className={`mt-0.5 block text-[10px] ${mine ? 'text-white/70' : 'text-muted'}`}>{label}</span>
+          </div>
+          {reactions.length > 0 && (
+            <span
+              className={`absolute -bottom-3 flex items-center gap-0.5 rounded-full border border-line bg-surface px-1.5 py-px text-sm shadow ${mine ? 'right-2' : 'left-2'}`}
+              title={[m.reactions.reader && `Reader: ${m.reactions.reader}`, m.reactions.admin && `Support: ${m.reactions.admin}`].filter(Boolean).join(' · ')}
+            >
+              {reactions.join('')}
+            </span>
+          )}
+        </div>
+        {onReact && (
+          <button type="button" onClick={() => setPicking((p) => !p)} className={action} aria-label="React to this message" title="React">
+            <Smile className="h-4 w-4" />
+          </button>
+        )}
+        {onReply && (
+          <button type="button" onClick={() => onReply(m)} className={action} aria-label="Reply to this message" title="Reply">
+            <Reply className="h-4 w-4" />
+          </button>
+        )}
+        {picking && (
+          <div className={`absolute bottom-full z-20 mb-1 flex gap-0.5 rounded-full border border-line bg-surface p-1 shadow-xl ${mine ? 'right-0' : 'left-0'}`} role="menu">
+            {REACTIONS.map((e) => (
+              <button
+                key={e}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setPicking(false)
+                  onReact(m, e)
+                }}
+                className={`rounded-full p-1 text-xl transition hover:scale-125 ${myReaction === e ? 'bg-brand/20' : ''}`}
+                aria-label={`React ${e}`}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-      {onReply && (
-        <button
-          type="button"
-          onClick={() => onReply(m)}
-          className="rounded-full p-1.5 text-muted opacity-60 transition hover:bg-surface-2 hover:text-ink sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
-          aria-label="Reply to this message"
-          title="Reply"
-        >
-          <Reply className="h-4 w-4" />
-        </button>
-      )}
+      {status && <span className="mt-0.5 px-1 text-[10px] text-muted">{status}</span>}
     </div>
   )
+}
+
+/** Put an updated message (e.g. new reactions) into a list of messages. */
+export function replaceMessage(list, message) {
+  return list?.map((x) => (x.id === message.id ? { ...x, ...message } : x))
 }
 
 /** Scrolls to a quoted message and flashes it. Returns [highlightedId, jump]. */

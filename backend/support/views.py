@@ -29,6 +29,7 @@ from .models import Conversation, Message
 logger = logging.getLogger(__name__)
 HISTORY = 200
 RESUME_DAYS = 30
+REACTIONS = ["❤️", "😆", "😮", "😢", "😡", "👍"]
 # Pictures, PDFs and everyday documents. Anything else is refused.
 FILE_TYPES = {
     ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif",
@@ -110,6 +111,7 @@ def serialize_message(message):
         "body": message.body,
         "gif_url": message.gif_url,
         "reply_to": quote(message.reply_to) if message.reply_to_id else None,
+        "reactions": {"reader": message.reader_reaction, "admin": message.admin_reaction},
         "file": (
             {"name": message.file_name, "type": message.file_type, "size": message.file_size, "url": f"support/files/{message.id}/"}
             if message.file_key
@@ -261,6 +263,7 @@ class MyConversationView(APIView):
         if conversation.unread_for_user:
             Conversation.objects.filter(pk=conversation.pk).update(unread_for_user=0)
             conversation.unread_for_user = 0
+            push_admins("support.seen", {"id": conversation.pk, "by": "reader"})  # admins see "Seen"
         return Response(my_thread(conversation))
 
     def patch(self, request):
@@ -286,6 +289,52 @@ def my_thread(conversation):
             conversation.save(update_fields=["resume_code"])
         data["resume_code"] = conversation.resume_code
     return data
+
+
+class ReactionInput(serializers.Serializer):
+    emoji = serializers.ChoiceField(choices=REACTIONS + [""], required=False, allow_blank=True)
+
+
+def react(message, side, emoji):
+    """Set (or, with the same emoji or "", clear) one side's reaction and tell the other side live."""
+    field = f"{side}_reaction"
+    setattr(message, field, "" if getattr(message, field) == emoji else emoji)
+    message.save(update_fields=[field])
+    conversation = message.conversation
+    payload = {"conversation": conversation.id, "message": serialize_message(message)}
+    push_admins("support.reaction", payload)
+    if conversation.user_id:
+        push_user(conversation.user_id, "support.reaction", payload)
+    return Response(serialize_message(message))
+
+
+class MyReactionView(APIView):
+    """POST /api/support/messages/<id>/react/ {"emoji": "❤️"} — the reader reacts to a message in their thread."""
+
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "chat"
+
+    def post(self, request, pk):
+        data = ReactionInput(data=request.data)
+        data.is_valid(raise_exception=True)
+        conversation = conversation_for(request)
+        message = get_object_or_404(Message.objects.select_related("conversation", "sender"), pk=pk, conversation=conversation) if conversation else None
+        if message is None:
+            return Response({"detail": "Not found."}, status=404)
+        return react(message, "reader", data.validated_data.get("emoji", ""))
+
+
+class AdminReactionView(APIView):
+    """POST /api/admin/support/messages/<id>/react/ {"emoji": "👍"} — support reacts to a message."""
+
+    permission_classes = [IsAdmin]
+
+    def post(self, request, pk):
+        data = ReactionInput(data=request.data)
+        data.is_valid(raise_exception=True)
+        message = get_object_or_404(Message.objects.select_related("conversation", "sender"), pk=pk)
+        return react(message, "admin", data.validated_data.get("emoji", ""))
 
 
 class UnreadView(APIView):
@@ -369,13 +418,12 @@ class MySendView(APIView):
             push_admins("support.message", payload)
             if sender:
                 push_user(sender.pk, "support.message", payload)
-            if first_unread:
-                who = (
-                    f"{first_name(sender)} ({sender.email})"
-                    if sender
-                    else f"guest {conversation.guest_name or ''}{f' ({conversation.guest_email})' if conversation.guest_email else ''}".strip()
-                )
-                notify_admins("support_message", f"New message from {who}", preview_text(message), "/admin/support")
+            who = (
+                f"{first_name(sender)} ({sender.email})"
+                if sender
+                else f"guest {conversation.guest_name or ''}{f' ({conversation.guest_email})' if conversation.guest_email else ''}".strip()
+            )
+            notify_admins("support_message", f"New message from {who}", preview_text(message), "/admin/support")
         return Response(serialize_message(message), status=201)
 
 
@@ -406,6 +454,8 @@ class AdminConversationView(APIView):
             Conversation.objects.filter(pk=pk).update(unread_for_admin=0)
             conversation.unread_for_admin = 0
             push_admins("support.read", {"id": pk})
+            if conversation.user_id:  # the reader sees "Seen" under their message
+                push_user(conversation.user_id, "support.seen", {"id": pk, "by": "admin"})
         return Response({**serialize_conversation(conversation), "messages": history(conversation)})
 
 
@@ -430,9 +480,9 @@ class AdminReplyView(APIView):
             if conversation.user_id:
                 push_user(conversation.user_id, "support.message", payload)
             push_admins("support.message", payload)
-            if first_unread and conversation.user_id:
+            if conversation.user_id:
                 notify([conversation.user_id], "support_reply", "Support replied to you", preview_text(message), "?chat=open")
-            elif first_unread and conversation.guest_email:
+            elif first_unread and conversation.guest_email:  # one email per batch of replies
                 transaction.on_commit(lambda: email_guest(conversation, message))
         return Response(serialize_message(message), status=201)
 

@@ -6,7 +6,7 @@ import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { timeAgo } from '../lib/time'
 import { onLiveEvent, useLive } from '../realtime/LiveProvider'
-import { ChatBubble, ChatComposer, previewOf, sendChatMessage, useJumpToMessage } from './ChatExtras'
+import { ChatBubble, ChatComposer, previewOf, replaceMessage, sendChatMessage, useJumpToMessage } from './ChatExtras'
 import { useToast } from './ui'
 
 const POLL_OPEN_MS = 10_000
@@ -244,9 +244,32 @@ export function SupportChat() {
     lastSeen.current = m.id
     setThread((t) => {
       const base = t || { messages: [], user: { is_guest: !user } }
-      return base.messages.some((x) => x.id === m.id) ? base : { ...base, messages: [...base.messages, m] }
+      if (base.messages.some((x) => x.id === m.id)) return base
+      // Not seen by support yet (until they open the thread).
+      return { ...base, unread_for_admin: (base.unread_for_admin || 0) + 1, messages: [...base.messages, m] }
     })
   }
+
+  async function reactTo(m, emoji) {
+    try {
+      const updated = await api.post(`support/messages/${m.id}/react/`, { emoji })
+      setThread((t) => ({ ...t, messages: replaceMessage(t.messages, updated) }))
+    } catch (e) {
+      toast(e, 'error')
+    }
+  }
+
+  // Support reacted, or opened (saw) the thread.
+  useEffect(() => {
+    const offReaction = onLiveEvent('support.reaction', ({ message }) =>
+      setThread((t) => (t ? { ...t, messages: replaceMessage(t.messages, message) } : t)),
+    )
+    const offSeen = onLiveEvent('support.seen', () => setThread((t) => (t ? { ...t, unread_for_admin: 0 } : t)))
+    return () => {
+      offReaction()
+      offSeen()
+    }
+  }, [])
 
   const messages = thread?.messages ?? null
   const name = user?.first_name || (thread?.user?.first_name && thread.user.first_name !== 'Guest' ? thread.user.first_name : '')
@@ -308,15 +331,18 @@ export function SupportChat() {
                 <p className="mt-1">Questions about a story, a payment or your account? Send us a message. No account needed.</p>
               </div>
             )}
-            {messages?.map((m) => (
+            {messages?.map((m, i) => (
               <ChatBubble
                 key={m.id}
                 m={m}
                 mine={!m.from_admin}
+                side="reader"
                 onReply={setReplyTo}
+                onReact={reactTo}
                 onJump={jumpTo}
                 highlighted={highlighted === m.id}
                 label={`${m.from_admin ? 'Support · ' : ''}${timeAgo(m.created_at)}`}
+                status={i === messages.length - 1 && !m.from_admin ? (thread.unread_for_admin ? 'Sent' : 'Seen ✓✓') : null}
               />
             ))}
           </div>
