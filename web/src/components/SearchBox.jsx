@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { api } from '../lib/api'
 import { formatCount } from '../lib/readingMode'
+import { RatingBadge } from './StoryRating'
 
 const HISTORY_KEY = 'search-history'
 const HISTORY_MAX = 8
@@ -56,6 +57,7 @@ function Tags({ story }) {
       <span className="inline-flex items-center gap-0.5">
         <Eye className="h-3 w-3" /> {formatCount(story.view_count)} views
       </span>
+      <RatingBadge average={story.rating_avg} count={story.rating_count} />
       {story.genre && <span>· {story.genre.name}</span>}
       {story.is_free && <span className="text-emerald-400">· Free</span>}
     </span>

@@ -3,6 +3,7 @@ from django.urls import path
 from . import views
 from .about import AboutView
 from .community import CommentDetailView, CommentListView, LikeView
+from .ratings import ProgressView, RatingView
 from .search import SearchSuggestView
 
 urlpatterns = [
@@ -15,6 +16,8 @@ urlpatterns = [
     path("stories/<slug:slug>/", views.StoryDetailView.as_view()),
     path("stories/<slug:slug>/view/", views.RecordViewView.as_view()),
     path("stories/<slug:slug>/like/", LikeView.as_view()),
+    path("stories/<slug:slug>/rating/", RatingView.as_view()),
+    path("stories/<slug:slug>/progress/", ProgressView.as_view()),
     path("stories/<slug:slug>/comments/", CommentListView.as_view()),
     path("comments/<int:pk>/", CommentDetailView.as_view()),
     path("stats/", views.StatsView.as_view()),

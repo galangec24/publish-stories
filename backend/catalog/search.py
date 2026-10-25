@@ -39,6 +39,8 @@ def suggestion(story, request, hot, preferred):
         "genre": {"name": genres[0].name, "color": genres[0].color} if genres else None,
         "column": story.column.title if story.column_id else "",
         "view_count": story.view_count,
+        "rating_avg": float(story.rating_avg),
+        "rating_count": story.rating_count,
         "is_free": story.is_free,
         "hot": story.id in hot,
         "recommended": bool(preferred & {g.id for g in genres}),

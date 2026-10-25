@@ -5,6 +5,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { BookReader } from '../components/BookReader'
 import { ProtectedContent } from '../components/ProtectedContent'
 import { QrPaywall } from '../components/QrPaywall'
+import { StoryRating } from '../components/StoryRating'
 import { ThemePicker } from '../components/ThemePicker'
 import { LikeButton, StoryComments } from '../components/StoryCommunity'
 import { GenreTags, Spinner, useToast } from '../components/ui'
@@ -27,6 +28,7 @@ export function StoryPage() {
   const [tocOpen, setTocOpen] = useState(false)
   const [counts, setCounts] = useState(null)
   const [social, setSocial] = useState({ liked: false }) // likes + comments, kept fresh by StoryComments
+  const [rating, setRating] = useState(null)
   const updateSocial = (patch) => setSocial((x) => ({ ...x, ...patch }))
   const top = useRef()
 
@@ -34,6 +36,23 @@ export function StoryPage() {
   useEffect(() => {
     api.post(`stories/${slug}/view/`).then(setCounts).catch(() => {})
   }, [slug])
+
+  useEffect(() => {
+    setRating(null)
+    api.get(`stories/${slug}/rating/`).then(setRating).catch(() => {})
+  }, [slug, user?.id])
+
+  // Note each chapter the reader opens (only readable ones count); finishing them all lets guests rate.
+  const openChapterId = story.data?.chapters[Math.min(index, story.data.chapters.length - 1)]?.id
+  const openChapterReadable = Boolean(story.data?.chapters.find((c) => c.id === openChapterId)?.content)
+  useEffect(() => {
+    if (!openChapterId || !openChapterReadable) return
+    api
+      .post(`stories/${slug}/progress/`, { chapter: openChapterId })
+      .then(() => api.get(`stories/${slug}/rating/`))
+      .then(setRating)
+      .catch(() => {})
+  }, [slug, openChapterId, openChapterReadable])
 
   // Back from PayMongo: ?payment=success. The webhook may land a few seconds later, so check a few times.
   useEffect(() => {
@@ -139,6 +158,7 @@ export function StoryPage() {
               <MessageCircle className="h-4 w-4" /> {formatCount(social.comment_count ?? s.comment_count)}
             </a>
           </div>
+          <StoryRating slug={s.slug} state={rating} onChange={setRating} />
           {s.synopsis && <p className="mt-4 text-sm text-muted">{s.synopsis}</p>}
           <p className="mt-3 text-xs text-muted">
             {s.word_count.toLocaleString()} words · {s.chapters.length} chapters ·{' '}

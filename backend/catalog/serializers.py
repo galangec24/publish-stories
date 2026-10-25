@@ -59,6 +59,8 @@ class StoryListSerializer(serializers.ModelSerializer):
             "view_count",
             "reader_count",
             "chapter_count",
+            "rating_avg",
+            "rating_count",
             "status",
             "published_at",
         ]
@@ -135,7 +137,7 @@ class AdminStorySerializer(StoryListSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["word_count", "view_count", "reader_count", "like_count", "comment_count", "published_at", "created_at", "updated_at"]
+        read_only_fields = ["word_count", "view_count", "reader_count", "like_count", "comment_count", "rating_avg", "rating_count", "published_at", "created_at", "updated_at"]
         extra_kwargs = {"slug": {"required": False}}
 
     def validate_font_size(self, value):

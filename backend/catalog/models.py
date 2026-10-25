@@ -108,6 +108,9 @@ class Story(models.Model):
     word_count = models.PositiveIntegerField(default=0)
     # Denormalised counters, maintained by record_view().
     view_count = models.PositiveIntegerField(default=0, help_text="Reads, at most one per reader per day")
+    # Star ratings (1-5), kept up to date by catalog.ratings.
+    rating_avg = models.DecimalField(max_digits=3, decimal_places=2, default=0)
+    rating_count = models.PositiveIntegerField(default=0)
     reader_count = models.PositiveIntegerField(default=0, help_text="Distinct readers, all time")
     like_count = models.PositiveIntegerField(default=0)
     comment_count = models.PositiveIntegerField(default=0)
@@ -239,3 +242,30 @@ class Comment(models.Model):
     class Meta:
         ordering = ["-created_at", "-id"]
         indexes = [models.Index(fields=["story", "parent", "-created_at"])]
+
+
+
+class ChapterRead(models.Model):
+    """A reader opened this chapter (and was allowed to read it). Lets guests rate only after finishing."""
+
+    story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="chapter_reads")
+    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name="reads")
+    reader_key = models.CharField(max_length=80, db_index=True)  # "user:<id>" or a hashed device id
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["chapter", "reader_key"], name="one_read_per_chapter_per_reader")]
+
+
+class StoryRating(models.Model):
+    """1-5 stars. One per account, or one per device for readers without an account."""
+
+    story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="ratings")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="story_ratings")
+    reader_key = models.CharField(max_length=80)
+    stars = models.PositiveSmallIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["story", "reader_key"], name="one_rating_per_reader")]

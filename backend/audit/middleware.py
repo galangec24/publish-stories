@@ -146,7 +146,9 @@ class AdminAuditMiddleware:
         if not label and isinstance(data, dict):
             label = str(data.get("title") or data.get("name") or "")
         if not label and isinstance(data, dict) and "created" in data:
-            label = f"{len(data['created'])} stories"
+            created = data["created"]
+            count = created if isinstance(created, int) else len(created)
+            label = f"{count} {'story' if count == 1 else 'stories'}"
         changes = _small_changes(body)
 
         if action in FOLDED:

@@ -1,4 +1,4 @@
-import { ArrowUpRight, BookOpen, Newspaper } from 'lucide-react'
+import { ArrowUpRight, BookOpen, Coffee, HeartHandshake, MessagesSquare, Newspaper, Sparkles, Tags, X } from 'lucide-react'
 import { lazy, Suspense, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
@@ -6,7 +6,7 @@ import { AboutMe } from '../components/AboutMe'
 import { AuthorBlog } from '../components/AuthorBlog'
 import { Book3D, Shelf } from '../components/Book3D'
 import { SearchBox } from '../components/SearchBox'
-import { Spinner } from '../components/ui'
+import { Spinner, useToast } from '../components/ui'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { formatCount } from '../lib/readingMode'
@@ -62,6 +62,19 @@ export function Home() {
           <p className="mt-4 max-w-lg text-lg text-muted">
             Free columns every day. Previews of novels and short stories. Unlock the full story in seconds with GCash, Maya or your bank via QR Ph.
           </p>
+          <ul className="mt-5 grid max-w-lg gap-3 text-sm sm:grid-cols-3">
+            {[
+              [Coffee, 'Ten minutes, a new world', 'Short chapters for the jeepney ride, the coffee break or right before sleep.'],
+              [HeartHandshake, 'Stories close to home', 'Davao, family, faith and the teachers who shaped us, told by a journalist who lived them.'],
+              [MessagesSquare, 'Read, then talk', 'Rate, like and comment. The author reads every one.'],
+            ].map(([Icon, title, text]) => (
+              <li key={title} className="rounded-2xl border border-line bg-surface/60 p-3">
+                <Icon className="h-5 w-5 text-accent" />
+                <p className="mt-1.5 font-semibold">{title}</p>
+                <p className="mt-0.5 text-xs text-muted">{text}</p>
+              </li>
+            ))}
+          </ul>
           {data?.stats && (
             <dl className="mt-6 flex flex-wrap gap-6">
               {[
@@ -127,7 +140,7 @@ export function Home() {
             ))}
           </div>
           <SearchBox
-            className="md:w-80"
+            className="md:max-w-2xl md:flex-1"
             value={query}
             onChange={(text) => {
               setQuery(text)
@@ -135,27 +148,12 @@ export function Home() {
             }}
             onSearch={(text) => setDebounced(text.trim())}
           />
-          <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
-            {(data?.genres || []).map((g) => {
-              const on = genreFilter.has(g.slug)
-              return (
-                <button
-                  key={g.id}
-                  onClick={() => toggle(g.slug)}
-                  className="chip shrink-0"
-                  style={{
-                    borderColor: `color-mix(in srgb, ${g.color} 55%, transparent)`,
-                    background: on ? `color-mix(in srgb, ${g.color} 30%, transparent)` : 'transparent',
-                  }}
-                >
-                  <span className="h-2 w-2 rounded-full" style={{ background: g.color }} />
-                  {g.name}
-                </button>
-              )
-            })}
-          </div>
         </div>
       </section>
+
+      {tab === 'stories' && data?.genres?.length > 0 && (
+        <GenrePicker genres={data.genres} selected={genreFilter} onToggle={toggle} onClear={() => setGenreFilter(new Set())} />
+      )}
 
       {!data && home.loading ? (
         <div className="py-10 text-center text-sm text-muted">
@@ -248,5 +246,96 @@ function ColumnsTab({ columns, loading }) {
         </section>
       ))}
     </div>
+  )
+}
+
+/** Browse by genre; signed-in readers can keep their picks as favorites for "Recommended" stories. */
+function GenrePicker({ genres, selected, onToggle, onClear }) {
+  const { user, refreshMe } = useAuth()
+  const toast = useToast()
+  const [saving, setSaving] = useState(false)
+  const favorites = new Set((user?.preferred_genres || []).map((g) => g.slug))
+  const picked = genres.filter((g) => selected.has(g.slug))
+  const sameAsFavorites = picked.length === favorites.size && picked.every((g) => favorites.has(g.slug))
+
+  async function saveFavorites() {
+    setSaving(true)
+    try {
+      await api.put('user/genres/', { genre_ids: picked.map((g) => g.id) })
+      await refreshMe()
+      toast('Saved. Stories in these genres now show a Recommended tag for you.')
+    } catch (e) {
+      toast(e, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="card mt-6 p-5">
+      <div className="flex flex-wrap items-start gap-3">
+        <span className="tile-3d grid h-10 w-10 shrink-0 place-items-center rounded-xl">
+          <Tags className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="font-display text-2xl">Find your genre</h2>
+          <p className="text-sm text-muted">
+            Tap the genres you love to see only those stories.{' '}
+            {user ? (
+              <>Save them as your favorites and we&apos;ll mark matching stories <span className="font-semibold text-brand">Recommended</span>.</>
+            ) : (
+              <>
+                <Link to="/login" className="text-brand hover:underline">Sign in</Link> to save your favorites and get{' '}
+                <span className="font-semibold text-brand">Recommended</span> picks.
+              </>
+            )}
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {genres.map((g) => {
+          const on = selected.has(g.slug)
+          return (
+            <button
+              key={g.id}
+              onClick={() => onToggle(g.slug)}
+              aria-pressed={on}
+              className="chip"
+              style={{
+                borderColor: `color-mix(in srgb, ${g.color} 55%, transparent)`,
+                background: on ? `color-mix(in srgb, ${g.color} 30%, transparent)` : 'transparent',
+              }}
+            >
+              <span className="h-2 w-2 rounded-full" style={{ background: g.color }} />
+              {g.name}
+              {favorites.has(g.slug) && <Sparkles className="h-3 w-3 text-brand" aria-label="favorite" />}
+            </button>
+          )
+        })}
+      </div>
+      {(picked.length > 0 || (user && favorites.size > 0)) && (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {picked.length > 0 && (
+            <button type="button" className="btn-ghost !py-1.5 text-sm" onClick={onClear}>
+              <X className="h-4 w-4" /> Clear ({picked.length})
+            </button>
+          )}
+          {user && picked.length > 0 && !sameAsFavorites && (
+            <button type="button" className="btn-primary !py-1.5 text-sm" onClick={saveFavorites} disabled={saving}>
+              <Sparkles className="h-4 w-4" /> {saving ? 'Saving…' : 'Save as my favorite genres'}
+            </button>
+          )}
+          {user && favorites.size > 0 && picked.length === 0 && (
+            <button
+              type="button"
+              className="btn-ghost !py-1.5 text-sm"
+              onClick={() => genres.filter((g) => favorites.has(g.slug)).forEach((g) => onToggle(g.slug))}
+            >
+              <Sparkles className="h-4 w-4" /> Show my favorites
+            </button>
+          )}
+        </div>
+      )}
+    </section>
   )
 }

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 
 import { titleStack } from '../lib/fonts'
 import { formatCount } from '../lib/readingMode'
+import { RatingBadge } from './StoryRating'
 
 /** A story shown as a physical book that tilts toward the cursor. */
 export function Book3D({ story, size = 'md' }) {
@@ -64,6 +65,7 @@ export function Book3D({ story, size = 'md' }) {
           {story.like_count > 0 && (
             <span className="inline-flex items-center gap-1"><Heart className="h-3.5 w-3.5" /> {formatCount(story.like_count)}</span>
           )}
+          <RatingBadge average={story.rating_avg} count={story.rating_count} />
         </p>
       </div>
     </Link>
