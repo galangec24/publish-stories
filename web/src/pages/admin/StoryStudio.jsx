@@ -15,6 +15,8 @@ import {
   Italic,
   List,
   ListOrdered,
+  Lock,
+  LockOpen,
   PanelLeft,
   Pencil,
   Plus,
@@ -348,6 +350,25 @@ export function StoryStudio() {
     }
   }
 
+  // Free chapters run in order from Chapter 1: freeing chapter i frees everything before it,
+  // locking chapter i locks everything after it.
+  async function toggleChapterLock(index) {
+    const free = story.free_chapters
+    const next = index < free ? index : index + 1
+    try {
+      setStory(await api.patch(`admin/stories/${id}/`, { free_chapters: next }))
+      toast(
+        next === 0
+          ? 'Every chapter now needs payment.'
+          : next >= chapters.length
+            ? 'Every chapter is now free to read.'
+            : `${next === 1 ? 'Chapter 1 is' : `Chapters 1–${next} are`} free; from Chapter ${next + 1} readers pay.`,
+      )
+    } catch (e) {
+      toast(e, 'error')
+    }
+  }
+
   async function saveSettings(changes) {
     try {
       setStory(await api.patch(`admin/stories/${id}/`, changes))
@@ -446,6 +467,8 @@ export function StoryStudio() {
     error: 'Not saved: press Ctrl+S',
   }[saveState]
   const published = story?.status === 'published'
+  // Paid stories (not in a free public column) choose which chapters readers get free.
+  const sellsChapters = Boolean(story && Number(story.price) > 0 && !story.column?.is_public)
   const chapterIndex = chapters.findIndex((c) => c.id === chapterId)
 
   return (
@@ -627,6 +650,11 @@ export function StoryStudio() {
           <aside className="flex w-64 shrink-0 flex-col border-r border-line bg-surface">
             <div className="flex items-center justify-between px-3 py-2">
               <span className="text-sm font-semibold">Navigation</span>
+              {sellsChapters && (
+                <span className="ml-auto mr-1 text-[10px] text-muted" title="Click a lock to change which chapters are free">
+                  <LockOpen className="inline h-3 w-3" /> free · <Lock className="inline h-3 w-3" /> paid
+                </span>
+              )}
               <button className="rounded-lg px-2 text-lg text-muted hover:text-ink" title="New chapter" onClick={() => addChapter()}>
                 <Plus className="h-5 w-5" />
               </button>
@@ -649,6 +677,22 @@ export function StoryStudio() {
                     <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted" aria-label="Drag to reorder" />
                     <span className="min-w-0 flex-1 truncate">{c.title || 'Untitled'}</span>
                     <span className="text-[10px] text-muted">{c.word_count}</span>
+                    {sellsChapters && (
+                      <button
+                        className={`rounded px-1 py-0.5 ${i < story.free_chapters ? 'text-emerald-400 hover:bg-emerald-500/10' : 'text-amber-400 hover:bg-amber-500/10'}`}
+                        title={
+                          i < story.free_chapters
+                            ? `Free to read. Click to lock this chapter${i < chapters.length - 1 ? ' and the ones after it' : ''}.`
+                            : `Readers pay for this. Click to make it free${i > 0 ? ' (with the chapters before it)' : ''}.`
+                        }
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleChapterLock(i)
+                        }}
+                      >
+                        {i < story.free_chapters ? <LockOpen className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                      </button>
+                    )}
                     <button className="hidden px-1 text-muted group-hover:block hover:text-ink" title="Rename" onClick={(e) => { e.stopPropagation(); renameChapter(c) }}><Pencil className="h-3.5 w-3.5" /></button>
                     <button className="hidden px-1 text-muted group-hover:block hover:text-red-400" title="Delete" onClick={(e) => { e.stopPropagation(); deleteChapter(c) }}><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
