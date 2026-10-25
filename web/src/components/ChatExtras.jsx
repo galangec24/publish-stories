@@ -1,4 +1,4 @@
-import { FileText, Download, ImagePlay, Paperclip, Search, Send, Smile, X } from 'lucide-react'
+import { Download, FileText, ImagePlay, Paperclip, Reply, Search, Send, Smile, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { api } from '../lib/api'
@@ -18,11 +18,12 @@ export function formatSize(bytes) {
 }
 
 /** Sends a chat message with optional GIF and file (multipart when there's a file). */
-export function sendChatMessage(path, { body, gif_url, file }) {
-  if (!file) return api.post(path, { body, gif_url })
+export function sendChatMessage(path, { body, gif_url, file, reply_to }) {
+  if (!file) return api.post(path, { body, gif_url, reply_to })
   const form = new FormData()
   if (body) form.append('body', body)
   if (gif_url) form.append('gif_url', gif_url)
+  if (reply_to) form.append('reply_to', reply_to)
   form.append('file', file)
   return api.upload(path, form)
 }
@@ -80,14 +81,70 @@ function Attachment({ file, mine }) {
 }
 
 /** The inside of a chat bubble: text, GIF and/or attachment. */
-export function MessageContent({ m, mine }) {
+export function MessageContent({ m, mine, onJump }) {
   return (
     <>
+      {m.reply_to && (
+        <button
+          type="button"
+          onClick={() => m.reply_to.id && onJump?.(m.reply_to.id)}
+          className={`mb-1 block w-full rounded-lg border-l-2 px-2 py-1 text-left text-xs ${
+            mine ? 'border-white/60 bg-white/15 text-white/85' : 'border-brand bg-surface text-muted'
+          }`}
+        >
+          <span className="block font-semibold">{m.reply_to.sender_name}</span>
+          <span className="line-clamp-2">{m.reply_to.text}</span>
+        </button>
+      )}
       {m.body && <span className="whitespace-pre-wrap">{m.body}</span>}
       {m.gif_url && <img src={m.gif_url} alt="GIF" className="mt-1 max-h-48 rounded-xl" loading="lazy" />}
       {m.file && <Attachment file={m.file} mine={mine} />}
     </>
   )
+}
+
+/**
+ * One chat message, Messenger-style: hover (or tap) for Reply; quotes jump to the original.
+ * `mine` puts it on the right, in the brand colour.
+ */
+export function ChatBubble({ m, mine, onReply, onJump, label, highlighted = false }) {
+  return (
+    <div id={`msg-${m.id}`} className={`group flex items-center gap-1 ${mine ? 'flex-row-reverse' : ''}`}>
+      <div
+        className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm transition ${
+          mine ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md bg-surface-2'
+        } ${highlighted ? 'ring-2 ring-accent' : ''}`}
+        title={new Date(m.created_at).toLocaleString()}
+      >
+        <MessageContent m={m} mine={mine} onJump={onJump} />
+        <span className={`mt-0.5 block text-[10px] ${mine ? 'text-white/70' : 'text-muted'}`}>{label}</span>
+      </div>
+      {onReply && (
+        <button
+          type="button"
+          onClick={() => onReply(m)}
+          className="rounded-full p-1.5 text-muted opacity-60 transition hover:bg-surface-2 hover:text-ink sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+          aria-label="Reply to this message"
+          title="Reply"
+        >
+          <Reply className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Scrolls to a quoted message and flashes it. Returns [highlightedId, jump]. */
+export function useJumpToMessage(container) {
+  const [highlighted, setHighlighted] = useState(null)
+  const jump = (id) => {
+    const el = container.current?.querySelector(`#msg-${id}`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setHighlighted(id)
+    setTimeout(() => setHighlighted(null), 1500)
+  }
+  return [highlighted, jump]
 }
 
 function EmojiPanel({ onPick }) {
@@ -148,7 +205,7 @@ function GifPanel({ onPick }) {
 }
 
 /** Message box with emoji, GIF and file buttons. `onSend({ body, gif_url, file })` returns a promise. */
-export function ChatComposer({ onSend, placeholder = 'Write a message…', disabled = false }) {
+export function ChatComposer({ onSend, placeholder = 'Write a message…', disabled = false, replyTo = null, onCancelReply }) {
   const toast = useToast()
   const [draft, setDraft] = useState('')
   const [file, setFile] = useState(null)
@@ -170,7 +227,8 @@ export function ChatComposer({ onSend, placeholder = 'Write a message…', disab
     if (!body && !file && !extra.gif_url) return
     setSending(true)
     try {
-      await onSend({ body, file, ...extra })
+      await onSend({ body, file, ...(replyTo && { reply_to: replyTo.id }), ...extra })
+      onCancelReply?.()
       setDraft('')
       setFile(null)
       setPanel(null)
@@ -196,6 +254,18 @@ export function ChatComposer({ onSend, placeholder = 'Write a message…', disab
 
   return (
     <div ref={box} className="relative border-t border-line p-2">
+      {replyTo && (
+        <div className="mb-2 flex items-start gap-2 rounded-xl border-l-2 border-brand bg-surface-2 px-3 py-1.5 text-xs">
+          <Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">Replying to {replyTo.from_admin ? 'Support' : replyTo.sender_name || 'message'}</span>
+            <span className="line-clamp-1 text-muted">{previewOf(replyTo)}</span>
+          </span>
+          <button type="button" onClick={onCancelReply} aria-label="Cancel reply" className="rounded-full p-0.5 hover:bg-line">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
       {panel && (
         <div className="card absolute right-2 bottom-full left-2 z-10 mb-2 overflow-hidden p-0 shadow-2xl">
           {panel === 'emoji' ? <EmojiPanel onPick={addEmoji} /> : <GifPanel onPick={(url) => send({ gif_url: url })} />}

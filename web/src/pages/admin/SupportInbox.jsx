@@ -1,7 +1,7 @@
 import { ArrowLeft, Inbox, Mail } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { ChatComposer, MessageContent, previewOf, sendChatMessage } from '../../components/ChatExtras'
+import { ChatBubble, ChatComposer, previewOf, sendChatMessage, useJumpToMessage } from '../../components/ChatExtras'
 import { Avatar } from '../../components/HeaderMenus'
 import { Spinner, useToast } from '../../components/ui'
 import { api } from '../../lib/api'
@@ -15,6 +15,8 @@ export function SupportInbox() {
   const [activeId, setActiveId] = useState(null)
   const [thread, setThread] = useState(null)
   const list = useRef(null)
+  const [replyTo, setReplyTo] = useState(null)
+  const [highlighted, jumpTo] = useJumpToMessage(list)
   const activeRef = useRef(null)
   activeRef.current = activeId
 
@@ -27,6 +29,7 @@ export function SupportInbox() {
   const openThread = useCallback(
     async (id) => {
       setActiveId(id)
+      setReplyTo(null)
       setThread(null)
       const data = await api.get(`admin/support/${id}/`)
       setThread(data)
@@ -130,19 +133,23 @@ export function SupportInbox() {
               </header>
               <div ref={list} className="flex-1 space-y-2 overflow-y-auto bg-bg-2/40 p-4">
                 {thread.messages.map((m) => (
-                  <div key={m.id} className={`flex ${m.from_admin ? 'justify-end' : 'justify-start'}`}>
-                    <div
-                      className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-sm ${m.from_admin ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md bg-surface-2'}`}
-                      title={new Date(m.created_at).toLocaleString()}
-                    >
-                      {!m.from_admin && <span className="mb-0.5 block text-[11px] font-semibold text-brand">{m.sender_name}</span>}
-                      <MessageContent m={m} mine={m.from_admin} />
-                      <span className={`mt-0.5 block text-[10px] ${m.from_admin ? 'text-white/70' : 'text-muted'}`}>{timeAgo(m.created_at)}</span>
-                    </div>
-                  </div>
+                  <ChatBubble
+                    key={m.id}
+                    m={m}
+                    mine={m.from_admin}
+                    onReply={setReplyTo}
+                    onJump={jumpTo}
+                    highlighted={highlighted === m.id}
+                    label={`${m.from_admin ? '' : `${m.sender_name} · `}${timeAgo(m.created_at)}`}
+                  />
                 ))}
               </div>
-              <ChatComposer onSend={reply} placeholder={`Reply to ${thread.user.first_name}…`} />
+              <ChatComposer
+                onSend={reply}
+                placeholder={`Reply to ${thread.user.first_name}…`}
+                replyTo={replyTo}
+                onCancelReply={() => setReplyTo(null)}
+              />
             </>
           )}
         </section>

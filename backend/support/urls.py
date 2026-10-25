@@ -7,6 +7,7 @@ urlpatterns = [
     path("support/", views.MyConversationView.as_view()),
     path("support/messages/", views.MySendView.as_view()),
     path("support/resume/", views.ResumeView.as_view()),
+    path("support/unread/", views.UnreadView.as_view()),
     path("support/files/<int:pk>/", views.FileView.as_view()),
     path("support/gifs/", GifSearchView.as_view()),
     path("admin/support/", views.AdminConversationListView.as_view()),

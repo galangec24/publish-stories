@@ -6,7 +6,7 @@ import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { timeAgo } from '../lib/time'
 import { onLiveEvent, useLive } from '../realtime/LiveProvider'
-import { ChatComposer, MessageContent, sendChatMessage } from './ChatExtras'
+import { ChatBubble, ChatComposer, previewOf, sendChatMessage, useJumpToMessage } from './ChatExtras'
 import { useToast } from './ui'
 
 const POLL_OPEN_MS = 10_000
@@ -156,23 +156,27 @@ export function SupportChat() {
   const cacheKey = `support-cache:${user?.id || 'guest'}`
   const [thread, setThread] = useState(() => readCache(cacheKey))
   const [badge, setBadge] = useState(0)
+  const badgeRef = useRef(0)
+  badgeRef.current = badge
   const list = useRef(null)
   const openRef = useRef(open)
   openRef.current = open
   const lastSeen = useRef(null)
+  const [replyTo, setReplyTo] = useState(null)
+  const [highlighted, jumpTo] = useJumpToMessage(list)
 
   useEffect(() => setThread(readCache(cacheKey)), [cacheKey])
   useEffect(() => {
     if (thread) writeCache(cacheKey, { ...thread, messages: thread.messages.slice(-100) })
   }, [thread, cacheKey])
 
+  // Opening the chat loads (and marks read) the latest messages.
   const load = useCallback(
     (quiet = false) =>
       api
         .get('support/')
         .then((t) => {
           const newest = t.messages[t.messages.length - 1]
-          if (!openRef.current && newest?.from_admin && lastSeen.current && newest.id !== lastSeen.current) setBadge((b) => b + 1)
           if (newest) lastSeen.current = newest.id
           setThread(t)
         })
@@ -180,19 +184,36 @@ export function SupportChat() {
     [toast],
   )
 
-  // Opening the chat loads (and marks read) the latest messages.
+  // While closed, only ask how many replies are waiting (that doesn't mark them read).
+  const checkUnread = useCallback(
+    () =>
+      api
+        .get('support/unread/')
+        .then(({ unread }) => {
+          if (unread > badgeRef.current) toast(unread === 1 ? 'New reply from Support. Open the chat to read it.' : `${unread} new replies from Support.`)
+          setBadge(unread)
+        })
+        .catch(() => {}),
+    [toast],
+  )
+
   useEffect(() => {
     if (!open) return
     setBadge(0)
     load()
   }, [open, user?.id, load])
 
-  // Signed-in readers get replies over the live connection; guests check every few seconds.
+  // Unread replies from earlier visits show on the bubble right away.
+  useEffect(() => {
+    if (!open) checkUnread()
+  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Signed-in readers get replies over the live connection; guests check regularly.
   useEffect(() => {
     if (user) return
-    const timer = setInterval(() => load(true), open ? POLL_OPEN_MS : POLL_CLOSED_MS)
+    const timer = setInterval(() => (openRef.current ? load(true) : checkUnread()), open ? POLL_OPEN_MS : POLL_CLOSED_MS)
     return () => clearInterval(timer)
-  }, [user, open, load])
+  }, [user, open, load, checkUnread])
 
   useEffect(
     () =>
@@ -200,10 +221,19 @@ export function SupportChat() {
         const m = conversation.last_message
         if (!m) return
         setThread((t) => (t && !t.messages.some((x) => x.id === m.id) ? { ...t, messages: [...t.messages, m] } : t))
-        if (m.from_admin && !openRef.current) setBadge((b) => b + 1)
+        if (m.from_admin && !openRef.current) {
+          setBadge((b) => b + 1)
+          toast(`New reply from Support: ${previewOf(m).slice(0, 60)}`)
+        }
       }),
-    [],
+    [toast],
   )
+
+  // "(2) Publish Stories" in the browser tab while replies are waiting.
+  useEffect(() => {
+    const base = document.title.replace(/^\(\d+\) /, '')
+    document.title = badge > 0 ? `(${badge}) ${base}` : base
+  }, [badge])
 
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' })
@@ -279,21 +309,18 @@ export function SupportChat() {
               </div>
             )}
             {messages?.map((m) => (
-              <div key={m.id} className={`flex ${m.from_admin ? 'justify-start' : 'justify-end'}`}>
-                <div
-                  className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${m.from_admin ? 'rounded-bl-md bg-surface-2' : 'rounded-br-md bg-brand text-white'}`}
-                  title={new Date(m.created_at).toLocaleString()}
-                >
-                  <MessageContent m={m} mine={!m.from_admin} />
-                  <span className={`mt-0.5 block text-[10px] ${m.from_admin ? 'text-muted' : 'text-white/70'}`}>
-                    {m.from_admin ? 'Support · ' : ''}
-                    {timeAgo(m.created_at)}
-                  </span>
-                </div>
-              </div>
+              <ChatBubble
+                key={m.id}
+                m={m}
+                mine={!m.from_admin}
+                onReply={setReplyTo}
+                onJump={jumpTo}
+                highlighted={highlighted === m.id}
+                label={`${m.from_admin ? 'Support · ' : ''}${timeAgo(m.created_at)}`}
+              />
             ))}
           </div>
-          <ChatComposer onSend={send} />
+          <ChatComposer onSend={send} replyTo={replyTo} onCancelReply={() => setReplyTo(null)} />
         </section>
       )}
     </>

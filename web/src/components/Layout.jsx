@@ -6,6 +6,7 @@ import { LanguagePicker } from '../i18n/LanguagePicker'
 import { useAuth } from '../lib/auth'
 import { InstallButton } from '../pwa/InstallPrompt'
 import { useLive } from '../realtime/LiveProvider'
+import { AdminMessagesButton } from './AdminMessagesButton'
 import { SupportChat } from './SupportChat'
 import { NotificationBell, ProfileMenu } from './HeaderMenus'
 import { ThemePicker } from './ThemePicker'
@@ -66,6 +67,7 @@ export function Layout() {
               )}
               {user ? (
                 <>
+                  {isAdmin && <AdminMessagesButton />}
                   <NotificationBell />
                   <ProfileMenu />
                 </>

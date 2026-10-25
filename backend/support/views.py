@@ -41,6 +41,7 @@ FILE_TYPES = {
 
 class MessageInput(serializers.Serializer):
     body = serializers.CharField(max_length=2000, trim_whitespace=True, required=False, allow_blank=True)
+    reply_to = serializers.IntegerField(required=False, allow_null=True)
     gif_url = serializers.URLField(max_length=500, required=False, allow_blank=True)
 
     def validate_gif_url(self, value):
@@ -53,7 +54,11 @@ def message_fields(request):
     """Text, GIF and/or file from a chat request -> Message fields. Raises ValidationError."""
     data = MessageInput(data=request.data)
     data.is_valid(raise_exception=True)
-    fields = {"body": data.validated_data.get("body", ""), "gif_url": data.validated_data.get("gif_url", "")}
+    fields = {
+        "body": data.validated_data.get("body", ""),
+        "gif_url": data.validated_data.get("gif_url", ""),
+        "reply_to_id": data.validated_data.get("reply_to"),
+    }
     upload = request.FILES.get("file")
     if upload:
         extension = os.path.splitext(upload.name)[1].lower()
@@ -71,6 +76,25 @@ def message_fields(request):
     return fields
 
 
+def quote(message):
+    """The short version of a message shown above a reply."""
+    if message is None:
+        return {"id": None, "text": "Message removed", "from_admin": False, "sender_name": ""}
+    return {
+        "id": message.id,
+        "text": preview_text(message)[:120],
+        "from_admin": message.from_admin,
+        "sender_name": "Support" if message.from_admin else (first_name(message.sender) if message.sender else (message.conversation.guest_name or "Guest")),
+    }
+
+
+def checked_reply(fields, conversation):
+    """Only replies to a message of the same conversation are kept."""
+    if fields.get("reply_to_id") and not conversation.messages.filter(pk=fields["reply_to_id"]).exists():
+        fields["reply_to_id"] = None
+    return fields
+
+
 def preview_text(message):
     """Short text for notifications and the inbox list."""
     if message.body:
@@ -85,6 +109,7 @@ def serialize_message(message):
         "conversation": message.conversation_id,
         "body": message.body,
         "gif_url": message.gif_url,
+        "reply_to": quote(message.reply_to) if message.reply_to_id else None,
         "file": (
             {"name": message.file_name, "type": message.file_type, "size": message.file_size, "url": f"support/files/{message.id}/"}
             if message.file_key
@@ -128,7 +153,9 @@ def serialize_conversation(conversation, last=None):
 
 
 def history(conversation):
-    messages = list(conversation.messages.select_related("sender", "conversation").order_by("-id")[:HISTORY])
+    messages = list(
+        conversation.messages.select_related("sender", "conversation", "reply_to__sender", "reply_to__conversation").order_by("-id")[:HISTORY]
+    )
     return [serialize_message(m) for m in reversed(messages)]
 
 
@@ -261,6 +288,16 @@ def my_thread(conversation):
     return data
 
 
+class UnreadView(APIView):
+    """GET /api/support/unread/ → {"unread": n} support replies not seen yet (doesn't mark them read)."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        conversation = conversation_for(request) if (request.user.is_authenticated or device_key(request)) else None
+        return Response({"unread": conversation.unread_for_user if conversation else 0})
+
+
 class ResumeView(APIView):
     """POST /api/support/resume/ {email} or {code} — continue an earlier guest conversation on this device.
 
@@ -323,7 +360,7 @@ class MySendView(APIView):
                 conversation.guest_network = network_key(request) or conversation.guest_network
                 conversation.save(update_fields=["guest_ip", "guest_network"])
             first_unread = conversation.unread_for_admin == 0
-            message = Message.objects.create(conversation=conversation, sender=sender, **fields)
+            message = Message.objects.create(conversation=conversation, sender=sender, **checked_reply(fields, conversation))
             Conversation.objects.filter(pk=conversation.pk).update(
                 last_message_at=message.created_at, unread_for_admin=F("unread_for_admin") + 1
             )
@@ -384,7 +421,7 @@ class AdminReplyView(APIView):
         with transaction.atomic():
             conversation = get_object_or_404(Conversation.objects.select_for_update(of=("self",)).select_related("user"), pk=pk)
             first_unread = conversation.unread_for_user == 0
-            message = Message.objects.create(conversation=conversation, sender=request.user, from_admin=True, **fields)
+            message = Message.objects.create(conversation=conversation, sender=request.user, from_admin=True, **checked_reply(fields, conversation))
             Conversation.objects.filter(pk=pk).update(
                 last_message_at=timezone.now(), unread_for_user=F("unread_for_user") + 1, unread_for_admin=0
             )

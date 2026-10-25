@@ -141,3 +141,34 @@ class RowLockTests(APITestCase):
         self.assertIn('select_for_update(of=("self",)).select_related("user")', inspect.getsource(views.AdminReplyView))
         self.assertIn('select_for_update(of=("self",)).select_related("story", "user")', inspect.getsource(manual.AdminReviewPaymentView))
         self.assertTrue(connection.features.has_select_for_update_of or connection.vendor == "sqlite")
+
+
+class ReplyAndUnreadTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.admin = User.objects.create_user(email="admin@example.com", password="x", is_admin=True)
+
+    def test_replies_quote_their_message_and_unread_counts(self):
+        first = self.client.post("/api/support/messages/", {"body": "Which QR is cheaper?"}, format="json", **PHONE).data
+        conversation = Conversation.objects.get()
+
+        self.client.force_authenticate(self.admin)
+        reply = self.client.post(
+            f"/api/admin/support/{conversation.id}/messages/", {"body": "Both are free to use.", "reply_to": first["id"]}, format="json"
+        ).data
+        self.assertEqual(reply["reply_to"], {"id": first["id"], "text": "Which QR is cheaper?", "from_admin": False, "sender_name": "Guest"})
+        other = Conversation.objects.create(guest_key="x" * 64)
+        stray = Message.objects.create(conversation=other, body="someone else")
+        cross = self.client.post(f"/api/admin/support/{conversation.id}/messages/", {"body": "hi", "reply_to": stray.id}, format="json").data
+        self.assertIsNone(cross["reply_to"])  # can't quote another thread
+        self.client.force_authenticate(None)
+
+        self.assertEqual(self.client.get("/api/support/unread/", **PHONE).data, {"unread": 2})
+        self.assertEqual(self.client.get("/api/support/unread/", **PHONE).data, {"unread": 2})  # counting doesn't mark read
+        history = self.client.get("/api/support/", **PHONE).data["messages"]
+        self.assertEqual(history[1]["reply_to"]["text"], "Which QR is cheaper?")
+        self.assertEqual(self.client.get("/api/support/unread/", **PHONE).data, {"unread": 0})
+        self.assertEqual(self.client.get("/api/support/unread/", **SAME_WIFI).data, {"unread": 0})
+
+        back = self.client.post("/api/support/messages/", {"body": "Thanks!", "reply_to": reply["id"]}, format="json", **PHONE).data
+        self.assertEqual(back["reply_to"]["sender_name"], "Support")
