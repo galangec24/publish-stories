@@ -88,7 +88,7 @@ export function SupportInbox() {
                   </span>
                   <span className="shrink-0 text-[11px] text-muted">{t.last_message_at && timeAgo(t.last_message_at)}</span>
                 </span>
-                <span className="block truncate text-xs text-muted">{t.user.email || (t.user.is_guest ? `No account · ${t.user.ip || 'IP unknown'}` : '')}</span>
+                <span className="block truncate text-xs text-muted">{t.user.email || (t.user.is_guest ? 'No email left' : '')}</span>
                 <span className={`mt-0.5 block truncate text-sm ${t.unread_for_admin ? 'font-semibold text-ink' : 'text-muted'}`}>
                   {t.last_message?.from_admin ? 'You: ' : ''}
                   {previewOf(t.last_message)}
@@ -125,9 +125,6 @@ export function SupportInbox() {
                     </a>
                   ) : (
                     <p className="text-xs text-muted">No email left. They see your reply when they open the chat on their device.</p>
-                  )}
-                  {thread.user.is_guest && (
-                    <p className="text-[11px] text-muted">Guest (no account) · wrote from {thread.user.ip || 'an unknown network'}</p>
                   )}
                 </div>
               </header>

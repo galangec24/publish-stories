@@ -13,6 +13,10 @@ class Conversation(models.Model):
     guest_name = models.CharField(max_length=80, blank=True)
     guest_email = models.EmailField(blank=True)
     guest_ip = models.CharField(max_length=60, blank=True)  # partly hidden, e.g. "49.145.10.•", for the admin only
+    # Lets a guest find their thread again after the device id is lost (incognito, cleared data):
+    # the hashed network offers it, and the email they left or their chat code proves it's theirs.
+    guest_network = models.CharField(max_length=64, blank=True, db_index=True)
+    resume_code = models.CharField(max_length=9, unique=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     last_message_at = models.DateTimeField(null=True, blank=True, db_index=True)
     unread_for_admin = models.PositiveIntegerField(default=0)

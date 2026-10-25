@@ -1,6 +1,7 @@
 import ipaddress
 import logging
 import os
+from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
@@ -17,7 +18,8 @@ from rest_framework.views import APIView
 from accounts.brevo import EmailSendError, send_email
 from accounts.permissions import IsAdmin
 from notifications.realtime import push_admins, push_user
-from payments.access import client_ip, device_key
+from payments.access import client_ip, device_key, network_key
+from payments.models import new_access_code
 from notifications.service import first_name, notify, notify_admins
 
 from . import storage
@@ -26,6 +28,7 @@ from .models import Conversation, Message
 
 logger = logging.getLogger(__name__)
 HISTORY = 200
+RESUME_DAYS = 30
 # Pictures, PDFs and everyday documents. Anything else is refused.
 FILE_TYPES = {
     ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif",
@@ -112,7 +115,6 @@ def serialize_conversation(conversation, last=None):
             "email": conversation.guest_email,
             "avatar_url": "",
             "is_guest": True,
-            "ip": conversation.guest_ip,
         }
     )
     return {
@@ -173,8 +175,31 @@ def conversation_for(request, create=False, lock=False):
         return None
     conversation = queryset.filter(user__isnull=True, guest_key=device).first()
     if conversation is None and create:
-        conversation = Conversation.objects.create(guest_key=device, guest_ip=masked_ip(request))
+        conversation = Conversation.objects.create(
+            guest_key=device, guest_ip=masked_ip(request), guest_network=network_key(request), resume_code=fresh_resume_code()
+        )
     return conversation
+
+
+def fresh_resume_code():
+    for _ in range(10):
+        code = new_access_code()
+        if not Conversation.objects.filter(resume_code=code).exists():
+            return code
+    raise RuntimeError("Couldn't make a unique chat code")
+
+
+def earlier_thread_on_network(request):
+    """A recent guest thread from this network, offered (never shown) to a device that lost its id."""
+    network = network_key(request)
+    if not network:
+        return None
+    since = timezone.now() - timedelta(days=RESUME_DAYS)
+    return (
+        Conversation.objects.filter(user__isnull=True, guest_network=network, last_message_at__gte=since)
+        .order_by("-last_message_at")
+        .first()
+    )
 
 
 class GuestDetails(serializers.Serializer):
@@ -196,11 +221,20 @@ class MyConversationView(APIView):
         if conversation is None:
             if not request.user.is_authenticated and not device_key(request):
                 return Response({"detail": "Allow this site to store data so we can keep your conversation."}, status=400)
-            return Response({"id": None, "messages": [], "user": {"is_guest": True, "first_name": "", "email": ""}})
+            earlier = earlier_thread_on_network(request)
+            return Response(
+                {
+                    "id": None,
+                    "messages": [],
+                    "user": {"is_guest": True, "first_name": "", "email": ""},
+                    # Only says that a thread exists here; proving it's yours needs the email or the chat code.
+                    "resume": {"available": bool(earlier), "with_email": bool(earlier and earlier.guest_email)},
+                }
+            )
         if conversation.unread_for_user:
             Conversation.objects.filter(pk=conversation.pk).update(unread_for_user=0)
             conversation.unread_for_user = 0
-        return Response({**serialize_conversation(conversation), "messages": history(conversation)})
+        return Response(my_thread(conversation))
 
     def patch(self, request):
         if request.user.is_authenticated:
@@ -213,7 +247,57 @@ class MyConversationView(APIView):
         conversation.guest_name = data.validated_data.get("name", conversation.guest_name).strip()
         conversation.guest_email = data.validated_data.get("email", conversation.guest_email).strip()
         conversation.save(update_fields=["guest_name", "guest_email"])
-        return Response(serialize_conversation(conversation))
+        return Response(my_thread(conversation))
+
+
+def my_thread(conversation):
+    """The reader's own view of their thread (guests also get their chat code)."""
+    data = {**serialize_conversation(conversation), "messages": history(conversation)}
+    if conversation.user_id is None:
+        if not conversation.resume_code:
+            conversation.resume_code = fresh_resume_code()
+            conversation.save(update_fields=["resume_code"])
+        data["resume_code"] = conversation.resume_code
+    return data
+
+
+class ResumeView(APIView):
+    """POST /api/support/resume/ {email} or {code} — continue an earlier guest conversation on this device.
+
+    The email works from the same network the conversation came from; the chat code works anywhere.
+    """
+
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "access_claim"
+
+    def post(self, request):
+        if request.user.is_authenticated:
+            return Response({"detail": "Signed-in readers already keep their conversation."}, status=400)
+        device = device_key(request)
+        if not device:
+            return Response({"detail": "Allow this site to store data so we can keep your conversation."}, status=400)
+        raw = str(request.data.get("code", "")).upper()
+        code = "".join(ch for ch in raw if ch.isalnum())
+        email = str(request.data.get("email", "")).strip()
+        found = None
+        if len(code) == 8:
+            found = Conversation.objects.filter(user__isnull=True, resume_code=f"{code[:4]}-{code[4:]}").first()
+        elif email:
+            earlier = earlier_thread_on_network(request)
+            if earlier and earlier.guest_email and earlier.guest_email.lower() == email.lower():
+                found = earlier
+        if found is None:
+            return Response({"detail": "That doesn't match an earlier conversation."}, status=400)
+        with transaction.atomic():
+            mine = Conversation.objects.filter(user__isnull=True, guest_key=device).exclude(pk=found.pk).first()
+            if mine:  # a fresh thread on this device joins the earlier one
+                mine.messages.update(conversation=found)
+                mine.delete()
+            found.guest_key = device
+            found.guest_network = network_key(request) or found.guest_network
+            found.save(update_fields=["guest_key", "guest_network"])
+        return Response(my_thread(found))
 
 
 class MySendView(APIView):
@@ -235,8 +319,9 @@ class MySendView(APIView):
         with transaction.atomic():
             conversation = conversation_for(request, create=True, lock=True)
             if sender is None:
-                conversation.guest_ip = masked_ip(request)  # where they last wrote from, for the admin
-                conversation.save(update_fields=["guest_ip"])
+                conversation.guest_ip = masked_ip(request)  # where they last wrote from
+                conversation.guest_network = network_key(request) or conversation.guest_network
+                conversation.save(update_fields=["guest_ip", "guest_network"])
             first_unread = conversation.unread_for_admin == 0
             message = Message.objects.create(conversation=conversation, sender=sender, **fields)
             Conversation.objects.filter(pk=conversation.pk).update(
@@ -297,7 +382,7 @@ class AdminReplyView(APIView):
         get_object_or_404(Conversation, pk=pk)
         fields = message_fields(request)
         with transaction.atomic():
-            conversation = get_object_or_404(Conversation.objects.select_for_update().select_related("user"), pk=pk)
+            conversation = get_object_or_404(Conversation.objects.select_for_update(of=("self",)).select_related("user"), pk=pk)
             first_unread = conversation.unread_for_user == 0
             message = Message.objects.create(conversation=conversation, sender=request.user, from_admin=True, **fields)
             Conversation.objects.filter(pk=pk).update(

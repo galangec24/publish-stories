@@ -84,6 +84,68 @@ function GuestDetails({ details, onSaved }) {
 }
 
 /**
+ * A guest on a new device (or incognito) can pick up an earlier conversation.
+ * The network only suggests it; the email they left, or their chat code, proves it's theirs.
+ */
+function ResumeCard({ offer, onResumed }) {
+  const toast = useToast()
+  const [mode, setMode] = useState(offer?.available && offer.with_email ? 'email' : 'code')
+  const [value, setValue] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [open, setOpen] = useState(Boolean(offer?.available))
+
+  async function resume(e) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      onResumed(await api.post('support/resume/', mode === 'email' ? { email: value } : { code: value }))
+      toast('Welcome back! Here is your conversation.')
+    } catch (err) {
+      toast(err, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="w-full border-b border-line px-3 py-1.5 text-left text-xs text-brand hover:underline">
+        Chatted with us before? Continue that conversation
+      </button>
+    )
+  }
+  return (
+    <form onSubmit={resume} className="space-y-2 border-b border-line bg-surface-2/50 p-3 text-xs">
+      <p className="font-medium text-ink">{offer?.available ? 'Welcome back! Continue your earlier conversation?' : 'Continue an earlier conversation'}</p>
+      <p className="text-muted">
+        {mode === 'email' ? 'Enter the email you gave us.' : 'Enter the chat code shown at the top of your earlier chat.'}
+      </p>
+      <div className="flex gap-2">
+        <input
+          className={`input !py-1.5 text-sm ${mode === 'code' ? 'font-mono uppercase tracking-widest' : ''}`}
+          type={mode === 'email' ? 'email' : 'text'}
+          placeholder={mode === 'email' ? 'you@example.com' : 'ABCD-EFGH'}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          required
+        />
+        <button className="btn-primary !px-3 !py-1 text-xs" disabled={busy || !value.trim()}>
+          {busy ? '…' : 'Continue'}
+        </button>
+      </div>
+      <div className="flex justify-between">
+        <button type="button" className="text-brand hover:underline" onClick={() => setMode(mode === 'email' ? 'code' : 'email')}>
+          {mode === 'email' ? 'Use a chat code instead' : 'Use my email instead'}
+        </button>
+        <button type="button" className="text-muted hover:text-ink" onClick={() => setOpen(false)}>
+          Start a new chat
+        </button>
+      </div>
+    </form>
+  )
+}
+
+/**
  * Floating "Messenger-style" support chat, for signed-in readers and guests alike.
  * Guests are recognised by this device; the last messages are cached so the chat opens instantly.
  */
@@ -192,7 +254,21 @@ export function SupportChat() {
             </button>
           </header>
 
-          {!user && thread && <GuestDetails details={thread.user || {}} onSaved={(t) => setThread((old) => ({ ...old, ...t, messages: old?.messages || [] }))} />}
+          {!user && thread && !thread.id && (
+            <ResumeCard
+              offer={thread.resume}
+              onResumed={(t) => {
+                lastSeen.current = t.messages[t.messages.length - 1]?.id ?? null
+                setThread(t)
+              }}
+            />
+          )}
+          {!user && thread && <GuestDetails details={thread.user || {}} onSaved={(t) => setThread((old) => ({ ...old, ...t }))} />}
+          {!user && thread?.resume_code && (
+            <p className="border-b border-line px-3 py-1 text-[11px] text-muted" title="Use it to continue this chat on another phone or browser">
+              Your chat code: <span className="font-mono font-semibold tracking-widest text-ink">{thread.resume_code}</span>
+            </p>
+          )}
 
           <div ref={list} className="flex-1 space-y-2 overflow-y-auto bg-bg-2/40 px-3 py-4">
             {messages === null && <p className="py-10 text-center text-sm text-muted">Loading…</p>}

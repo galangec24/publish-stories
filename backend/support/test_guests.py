@@ -32,7 +32,8 @@ class GuestSupportTests(APITestCase):
         self.client.force_authenticate(self.admin)
         inbox = self.client.get("/api/admin/support/").data["results"][0]
         self.assertTrue(inbox["user"]["is_guest"])
-        self.assertEqual((inbox["user"]["first_name"], inbox["user"]["email"], inbox["user"]["ip"]), ("Lia", "lia@example.com", "49.145.10.•"))
+        self.assertEqual((inbox["user"]["first_name"], inbox["user"]["email"]), ("Lia", "lia@example.com"))
+        self.assertNotIn("ip", inbox["user"])  # stored for resuming, not shown
 
         with mock.patch("support.views.send_email") as send, self.captureOnCommitCallbacks(execute=True):
             reply = self.client.post(f"/api/admin/support/{inbox['id']}/messages/", {"body": "Scan the BPI QR."}, format="json")
@@ -74,3 +75,69 @@ class GuestSupportTests(APITestCase):
     def test_guest_rate_limit(self):
         codes = [self.client.post("/api/support/messages/", {"body": f"m{i}"}, format="json", **PHONE).status_code for i in range(21)]
         self.assertEqual(codes[-1], 429)
+
+
+INCOGNITO = {"HTTP_X_VIEWER_ID": "incognito-0003-cccccccc", "HTTP_X_FORWARDED_FOR": "49.145.10.20"}
+ELSEWHERE = {"HTTP_X_VIEWER_ID": "elsewhere-0004-dddddddd", "HTTP_X_FORWARDED_FOR": "112.198.5.6"}
+
+
+class ResumeConversationTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+
+    def start(self, email=""):
+        if email:
+            self.client.patch("/api/support/", {"name": "Lia", "email": email}, format="json", **PHONE)
+        self.client.post("/api/support/messages/", {"body": "Hello from my phone"}, format="json", **PHONE)
+        return self.client.get("/api/support/", **PHONE).data["resume_code"]
+
+    def test_same_network_is_offered_but_needs_the_email(self):
+        self.start(email="lia@example.com")
+        offer = self.client.get("/api/support/", **INCOGNITO).data
+        self.assertEqual(offer["messages"], [])  # nothing shown before proof
+        self.assertEqual(offer["resume"], {"available": True, "with_email": True})
+
+        wrong = self.client.post("/api/support/resume/", {"email": "someone@example.com"}, format="json", **INCOGNITO)
+        self.assertEqual(wrong.status_code, 400)
+        ok = self.client.post("/api/support/resume/", {"email": "LIA@example.com"}, format="json", **INCOGNITO)
+        self.assertEqual([m["body"] for m in ok.data["messages"]], ["Hello from my phone"])
+        self.assertEqual(self.client.get("/api/support/", **INCOGNITO).data["messages"][0]["body"], "Hello from my phone")
+
+        # The email only works from the network the conversation came from.
+        self.assertEqual(self.client.post("/api/support/resume/", {"email": "lia@example.com"}, format="json", **ELSEWHERE).status_code, 400)
+        self.assertFalse(self.client.get("/api/support/", **ELSEWHERE).data["resume"]["available"])
+
+    def test_chat_code_works_anywhere(self):
+        code = self.start()
+        self.assertRegex(code, r"^[A-Z2-9]{4}-[A-Z2-9]{4}$")
+        self.assertEqual(self.client.get("/api/support/", **INCOGNITO).data["resume"], {"available": True, "with_email": False})
+        ok = self.client.post("/api/support/resume/", {"code": code.lower().replace("-", " ")}, format="json", **ELSEWHERE)
+        self.assertEqual(ok.status_code, 200, ok.data)
+        self.assertEqual(ok.data["messages"][0]["body"], "Hello from my phone")
+        self.assertEqual(self.client.post("/api/support/resume/", {"code": "AAAA-AAAA"}, format="json", **ELSEWHERE).status_code, 400)
+
+
+class RowLockTests(APITestCase):
+    def test_locks_only_their_own_table(self):
+        # Postgres refuses FOR UPDATE on the nullable side of a join (guest threads, guest purchases);
+        # SQLite ignores row locks, so check the SQL shape instead.
+        from django.db import connection
+
+        from payments.models import Subscription
+
+        from .models import Conversation as Thread
+
+        for queryset in (
+            Thread.objects.select_for_update(of=("self",)).select_related("user"),
+            Subscription.objects.select_for_update(of=("self",)).select_related("story", "user"),
+        ):
+            self.assertTrue(queryset.query.select_for_update_of)
+        import inspect
+
+        from payments import manual
+
+        from . import views
+
+        self.assertIn('select_for_update(of=("self",)).select_related("user")', inspect.getsource(views.AdminReplyView))
+        self.assertIn('select_for_update(of=("self",)).select_related("story", "user")', inspect.getsource(manual.AdminReviewPaymentView))
+        self.assertTrue(connection.features.has_select_for_update_of or connection.vendor == "sqlite")

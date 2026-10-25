@@ -334,7 +334,7 @@ class AdminReviewPaymentView(APIView):
     def post(self, request, pk):
         with transaction.atomic():
             purchase = get_object_or_404(
-                Subscription.objects.select_for_update().select_related("story", "user"),
+                Subscription.objects.select_for_update(of=("self",)).select_related("story", "user"),
                 pk=pk,
                 provider=Subscription.Provider.MANUAL,
             )

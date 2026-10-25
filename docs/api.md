@@ -61,6 +61,7 @@ Legend: 🌐 anyone · 👤 signed in · 🛡️ admin
 | `GET notifications/`, `POST notifications/<id>/read/`, `POST notifications/read-all/` | 👤 | Bell |
 | `GET support/`, `POST support/messages/` | 🌐 | My conversation, by account or (for guests) by this device. Messages take `body`, `gif_url` and/or a `file` (multipart). Guests are limited to 20 messages an hour per IP |
 | `PATCH support/` | 🌐 guests | `{name, email}` so support can reply by email too |
+| `POST support/resume/` | 🌐 guests | `{email}` (same network) or `{code}` (anywhere): continue an earlier guest conversation on this device. `GET support/` returns `resume.available` when one exists on this network |
 | `GET support/files/<message id>/` | 🌐 / 🛡️ | Download an attachment (the account or device that owns the thread, or an admin) |
 | `GET support/gifs/?q=` | 🌐 | GIPHY search through the server |
 | WebSocket `wss://…/ws/?token=<JWT>` | 👤 | Live events |
