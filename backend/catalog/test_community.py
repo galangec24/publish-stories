@@ -135,3 +135,35 @@ class ColumnsTabTests(APITestCase):
         self.assertEqual(sorted(s["title"] for s in listed), ["Draft piece", "On Teachers"])
         counts = {c["title"]: c["story_count"] for c in self.client.get("/api/admin/columns/").data}
         self.assertEqual(counts, {"Announced": 0, "Empty": 0, "Sunday Reflections": 2})
+
+
+class SearchSuggestTests(APITestCase):
+    def test_suggestions_rank_titles_and_tag_hot_and_recommended(self):
+        from datetime import date
+
+        from .models import StoryView
+
+        romance = Genre.objects.create(name="Romance")
+        horror = Genre.objects.create(name="Horror")
+        a = Story.objects.create(title="Ulan sa Davao", author_name="M. Valderrama", status="published", view_count=5)
+        b = Story.objects.create(title="Gabi", synopsis="Ulan all night", status="published", view_count=50)
+        Story.objects.create(title="Ulan draft", status="draft")
+        a.genres.add(romance)
+        b.genres.add(horror)
+        for i in range(3):
+            StoryView.objects.create(story=b, viewer_key=f"k{i}", date=date.today())
+
+        found = self.client.get("/api/search/suggest/", {"q": "ulan"}).data["results"]
+        self.assertEqual([s["title"] for s in found], ["Ulan sa Davao", "Gabi"])  # title match first, drafts hidden
+        self.assertTrue(found[1]["hot"])
+        self.assertFalse(found[0]["recommended"])  # guests have no genres
+
+        reader = User.objects.create_user(email="r@example.com", password="x")
+        reader.preferred_genres.add(romance)
+        self.client.force_authenticate(reader)
+        found = self.client.get("/api/search/suggest/", {"q": "ulan"}).data["results"]
+        self.assertTrue(found[0]["recommended"])
+        self.assertEqual(found[0]["genre"]["name"], "Romance")
+
+        trending = self.client.get("/api/search/suggest/").data["results"]
+        self.assertEqual(trending[0]["title"], "Gabi")  # hot first when nothing is typed

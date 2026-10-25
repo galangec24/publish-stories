@@ -1,10 +1,11 @@
 import { ArrowUpRight, BookOpen, Newspaper } from 'lucide-react'
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
 import { AboutMe } from '../components/AboutMe'
 import { AuthorBlog } from '../components/AuthorBlog'
 import { Book3D, Shelf } from '../components/Book3D'
+import { SearchBox } from '../components/SearchBox'
 import { Spinner } from '../components/ui'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -27,12 +28,7 @@ export function Home() {
   const columns = useCachedAsync('cache:columns', () => (tab === 'columns' ? api.get('columns/') : Promise.resolve(undefined)), [tab])
   const [genreFilter, setGenreFilter] = useState(new Set())
   const [query, setQuery] = useState('')
-  const [debounced, setDebounced] = useState('')
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(query.trim()), 350)
-    return () => clearTimeout(t)
-  }, [query])
+  const [debounced, setDebounced] = useState('') // the search shown as a full results grid
 
   const filtering = genreFilter.size > 0 || debounced !== ''
   const filtered = useAsync(
@@ -130,11 +126,14 @@ export function Home() {
               </button>
             ))}
           </div>
-          <input
-            className="input md:max-w-xs"
-            placeholder="Search titles, authors…"
+          <SearchBox
+            className="md:w-80"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(text) => {
+              setQuery(text)
+              if (!text.trim()) setDebounced('')
+            }}
+            onSearch={(text) => setDebounced(text.trim())}
           />
           <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
             {(data?.genres || []).map((g) => {
