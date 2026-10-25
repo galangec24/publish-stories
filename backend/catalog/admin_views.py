@@ -25,6 +25,7 @@ from .serializers import (
     ColumnSerializer,
     GenreSerializer,
     ImportOptionsSerializer,
+    unique_titles,
 )
 from .views import filter_stories
 
@@ -120,6 +121,9 @@ class AdminChapterListView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         return Chapter.objects.filter(story_id=self.kwargs["story_id"])
+
+    def get_serializer_context(self):
+        return {**super().get_serializer_context(), "story_id": self.kwargs["story_id"]}
 
     def perform_create(self, serializer):
         story = self.get_story()
@@ -305,8 +309,9 @@ class AdminStoryImportView(APIView):
                 created_by=self.request.user,
             )
             story.genres.set({g.pk for g in genres})
+            titles = unique_titles([c.title[:190] for c in manuscript.chapters])
             for index, chapter in enumerate(manuscript.chapters):
-                Chapter.objects.create(story=story, title=chapter.title[:200], order=index, content=chapter.content)
+                Chapter.objects.create(story=story, title=titles[index], order=index, content=chapter.content)
             story.refresh_word_count()
             if options.get("status") == Story.Status.PUBLISHED:
                 if story.word_count:
@@ -413,9 +418,14 @@ class AdminImportOneView(APIView):
             serializer = AdminStorySerializer(data=data, context={"request": request})
             serializer.is_valid(raise_exception=True)
             story = serializer.save(created_by=request.user)
+            names = unique_titles(
+                [
+                    " ".join(titles[i].split())[:190] if i < len(titles) and isinstance(titles[i], str) and titles[i].strip() else c.title[:190]
+                    for i, c in enumerate(manuscript.chapters)
+                ]
+            )
             for index, chapter in enumerate(manuscript.chapters):
-                title = titles[index].strip() if index < len(titles) and isinstance(titles[index], str) and titles[index].strip() else chapter.title
-                Chapter.objects.create(story=story, title=title[:200], order=index, content=chapter.content)
+                Chapter.objects.create(story=story, title=names[index], order=index, content=chapter.content)
             story.refresh_word_count()
         story = self.get_story(story.pk)
         return Response(AdminStorySerializer(story, context={"request": request}).data, status=status.HTTP_201_CREATED)

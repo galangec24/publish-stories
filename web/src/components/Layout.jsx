@@ -8,6 +8,7 @@ import { InstallButton } from '../pwa/InstallPrompt'
 import { useLive } from '../realtime/LiveProvider'
 import { SupportChat } from './SupportChat'
 import { NotificationBell, ProfileMenu } from './HeaderMenus'
+import { ThemePicker } from './ThemePicker'
 
 const Background3D = lazy(() => import('./Background3D'))
 
@@ -93,6 +94,9 @@ export function Layout() {
             <Link to="/privacy" className="hover:text-ink">Privacy Policy</Link>
             <Link to="/terms" className="hover:text-ink">Terms of Service</Link>
           </nav>
+          <div className="mx-auto mt-4 flex w-fit items-center gap-2 text-xs">
+            Theme <ThemePicker compact />
+          </div>
           <p className="mt-3 text-xs">
             &copy; {new Date().getFullYear()} <span className="notranslate" translate="no">Publish Stories</span> · Stories by Maria Gemima Valderrama
           </p>

@@ -289,3 +289,36 @@ class AboutProfileTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("roles", response.data)
         self.assertIn("links", response.data)
+
+
+class ChapterRulesTests(APITestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(email="admin@example.com", password="x", is_admin=True)
+        self.story = Story.objects.create(title="Rules", price=49, free_chapters=1, status="published")
+        self.one = Chapter.objects.create(story=self.story, title="Chapter 1", order=0, content=doc("a"), word_count=1)
+        self.two = Chapter.objects.create(story=self.story, title="Chapter 2", order=1, content=doc("b"), word_count=1)
+
+    def test_chapter_titles_are_unique_within_a_story(self):
+        self.client.force_authenticate(self.admin)
+        url = f"/api/admin/stories/{self.story.id}/chapters/"
+        self.assertIn("title", self.client.post(url, {"title": " chapter  1 "}, format="json").data)
+        self.assertEqual(self.client.post(url, {"title": "Chapter 3"}, format="json").status_code, 201)
+        renamed = self.client.patch(f"/api/admin/chapters/{self.two.id}/", {"title": "CHAPTER 1"}, format="json")
+        self.assertEqual(renamed.status_code, 400)
+        self.assertEqual(self.client.patch(f"/api/admin/chapters/{self.two.id}/", {"title": "Chapter 2"}, format="json").status_code, 200)
+        other = Story.objects.create(title="Other")
+        self.assertEqual(self.client.post(f"/api/admin/stories/{other.id}/chapters/", {"title": "Chapter 1"}, format="json").status_code, 201)
+
+    def test_empty_chapters_after_the_free_ones_are_locked_too(self):
+        Chapter.objects.create(story=self.story, title="Chapter 3", order=2, content=[], word_count=0)
+        Chapter.objects.create(story=self.story, title="Chapter 4", order=3, content=[], word_count=0)
+        self.story.free_chapters = 3
+        self.story.save()
+        chapters = self.client.get(f"/api/stories/{self.story.slug}/").data["chapters"]
+        self.assertEqual([c["locked"] for c in chapters], [False, False, False, True])
+        self.assertIsNone(chapters[3]["content"])
+
+    def test_import_makes_repeated_headings_distinct(self):
+        from .serializers import unique_titles
+
+        self.assertEqual(unique_titles(["Prologue", "One", "prologue", "Prologue"]), ["Prologue", "One", "prologue (2)", "Prologue (3)"])

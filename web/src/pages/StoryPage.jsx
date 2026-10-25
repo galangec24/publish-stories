@@ -5,6 +5,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { BookReader } from '../components/BookReader'
 import { ProtectedContent } from '../components/ProtectedContent'
 import { QrPaywall } from '../components/QrPaywall'
+import { ThemePicker } from '../components/ThemePicker'
 import { LikeButton, StoryComments } from '../components/StoryCommunity'
 import { GenreTags, Spinner, useToast } from '../components/ui'
 import { api } from '../lib/api'
@@ -170,6 +171,11 @@ export function StoryPage() {
             </div>
           </div>
 
+          <div className="mt-3">
+            <p className="mb-1.5 text-xs font-medium text-muted">Theme</p>
+            <ThemePicker />
+          </div>
+
           <button className="btn-ghost mt-4 w-full lg:hidden" onClick={() => setTocOpen((o) => !o)}>
             {tocOpen ? 'Hide chapters' : 'Chapters'}
           </button>
@@ -191,7 +197,7 @@ export function StoryPage() {
       </aside>
 
       <article className="min-w-0">
-        <ProtectedContent watermark={user?.email}>
+        <ProtectedContent>
           {mode === 'book' ? (
             <div className="rounded-3xl border border-line bg-page px-6 py-8 shadow-2xl shadow-black/20 sm:px-12 sm:py-10">
               <BookReader

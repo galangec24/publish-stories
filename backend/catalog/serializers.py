@@ -91,6 +91,30 @@ class AdminChapterSerializer(serializers.ModelSerializer):
         fields = ["id", "story", "title", "order", "content", "word_count", "revision", "updated_at"]
         read_only_fields = ["story", "word_count", "revision", "updated_at"]
 
+    def validate_title(self, value):
+        """Each chapter in a story needs its own name (ignoring case and extra spaces)."""
+        value = " ".join(value.split())
+        if not value:
+            raise serializers.ValidationError("Give the chapter a title.")
+        story_id = self.instance.story_id if self.instance else self.context.get("story_id")
+        if story_id:
+            taken = Chapter.objects.filter(story_id=story_id, title__iexact=value)
+            if self.instance:
+                taken = taken.exclude(pk=self.instance.pk)
+            if taken.exists():
+                raise serializers.ValidationError(f"There is already a chapter called “{value}” in this story.")
+        return value
+
+
+def unique_titles(titles):
+    """Make repeated chapter titles distinct: "Prologue", "Prologue (2)", ..."""
+    seen, result = {}, []
+    for title in titles:
+        key = title.strip().lower()
+        seen[key] = seen.get(key, 0) + 1
+        result.append(title if seen[key] == 1 else f"{title} ({seen[key]})")
+    return result
+
 
 class AdminStorySerializer(StoryListSerializer):
     column_id = serializers.PrimaryKeyRelatedField(

@@ -9,10 +9,9 @@ import { useEffect, useState } from 'react'
  *    cover, the same as if the reader had switched to another tab;
  *  - Print Screen / macOS screenshot shortcuts trigger the cover and overwrite the clipboard;
  *  - printing, saving, copying, right-click and text selection are disabled;
- *  - a faint watermark with the reader's email makes leaks traceable.
  * The real protection is server-side: locked readers never receive the full text.
  */
-export function ProtectedContent({ watermark, children }) {
+export function ProtectedContent({ children }) {
   const [hidden, setHidden] = useState(() => typeof document !== 'undefined' && !document.hasFocus())
 
   useEffect(() => {
@@ -63,7 +62,6 @@ export function ProtectedContent({ watermark, children }) {
       <div className={hidden ? 'invisible' : ''} aria-hidden={hidden}>
         {children}
       </div>
-      {watermark && !hidden && <Watermark text={watermark} />}
       {hidden && (
         <div className="absolute inset-0 z-10 flex min-h-[50vh] items-start justify-center bg-page pt-32">
           <div className="text-center">
@@ -73,21 +71,6 @@ export function ProtectedContent({ watermark, children }) {
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-function Watermark({ text }) {
-  const tiles = Array.from({ length: 60 })
-  return (
-    <div className="notranslate pointer-events-none absolute inset-0 overflow-hidden select-none" translate="no" aria-hidden>
-      <div className="grid -rotate-[22deg] grid-cols-3 gap-x-10 gap-y-24 opacity-[0.06] [width:140%] [margin-left:-20%]">
-        {tiles.map((_, i) => (
-          <span key={i} className="whitespace-nowrap text-sm font-semibold text-page-ink">
-            {text}
-          </span>
-        ))}
-      </div>
     </div>
   )
 }

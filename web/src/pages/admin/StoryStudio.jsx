@@ -254,7 +254,11 @@ export function StoryStudio() {
 
   // --------------------------------------------------------------- chapters
   async function addChapter({ order, content, title } = {}) {
-    const name = title ?? (await ask('New chapter', 'Chapter title', `Chapter ${chapters.length + 1}`))
+    // Suggest the next "Chapter N" that no chapter is using yet (titles must be unique in a story).
+    const used = new Set(chapters.map((c) => c.title.trim().toLowerCase()))
+    let n = chapters.length + 1
+    while (used.has(`chapter ${n}`)) n += 1
+    const name = title ?? (await ask('New chapter', 'Chapter title', `Chapter ${n}`))
     if (!name) return
     try {
       const created = await api.post(`admin/stories/${id}/chapters/`, {
