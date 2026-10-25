@@ -1,4 +1,4 @@
-import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, Eye, Lock, MessageCircle, ScrollText, UsersRound } from 'lucide-react'
+import { BookOpen, Check, ChevronLeft, ChevronRight, ExternalLink, Eye, History, Lock, MessageCircle, ScrollText, UsersRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
@@ -54,6 +54,87 @@ export function StoryPage() {
       .catch(() => {})
   }, [slug, openChapterId, openChapterReadable])
 
+  // --- Reading progress: ✓ on chapters already read, and "continue where you left off". ---
+  const posKey = `reading-pos:${slug}`
+  const [readIds, setReadIds] = useState(() => new Set())
+  const [resumed, setResumed] = useState(false)
+  const resumeAt = useRef(null) // { chapterId, page, scroll } waiting to be applied
+  const resumedFor = useRef(null)
+
+  useEffect(() => {
+    setReadIds(new Set())
+    setResumed(false)
+  }, [slug])
+  useEffect(() => {
+    if (story.data?.read_chapters) setReadIds((ids) => new Set([...ids, ...story.data.read_chapters]))
+  }, [story.data?.read_chapters])
+  useEffect(() => {
+    if (openChapterId && openChapterReadable) setReadIds((ids) => (ids.has(openChapterId) ? ids : new Set([...ids, openChapterId])))
+  }, [openChapterId, openChapterReadable])
+
+  // On opening a story, jump to the chapter (and page or spot) the reader left off at.
+  useEffect(() => {
+    const data = story.data
+    if (!data || resumedFor.current === slug) return
+    resumedFor.current = slug
+    let saved = null
+    try {
+      saved = JSON.parse(localStorage.getItem(posKey) || 'null')
+    } catch {
+      /* no saved spot */
+    }
+    const target = data.last_chapter ?? saved?.chapterId
+    const at = data.chapters.findIndex((c) => c.id === target)
+    if (at < 0) return
+    const sameChapter = saved?.chapterId === target
+    const page = sameChapter ? saved.page || 0 : 0
+    const scroll = sameChapter ? saved.scroll || 0 : 0
+    if (at === 0 && !page && !scroll) return
+    resumeAt.current = { chapterId: target, page, scroll }
+    setIndex(at)
+    setResumed(true)
+    toast(`Continuing where you left off: ${data.chapters[at].title}`)
+  }, [story.data, slug]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Scroll mode: go back to the saved spot once the chapter is on screen.
+  useEffect(() => {
+    const spot = resumeAt.current
+    if (mode !== 'scroll' || !spot?.scroll || spot.chapterId !== openChapterId) return
+    const t = setTimeout(() => window.scrollTo({ top: spot.scroll, behavior: 'smooth' }), 400)
+    resumeAt.current = null
+    return () => clearTimeout(t)
+  }, [mode, openChapterId])
+
+  // Remember the spot as the reader goes (scroll mode).
+  useEffect(() => {
+    if (mode !== 'scroll' || !openChapterId) return
+    let timer
+    const onScroll = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        try {
+          localStorage.setItem(posKey, JSON.stringify({ chapterId: openChapterId, scroll: Math.round(window.scrollY) }))
+        } catch {
+          /* storage full: just don't remember */
+        }
+      }, 400)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('scroll', onScroll)
+    }
+  }, [mode, openChapterId, posKey])
+
+  function rememberPage(page) {
+    if (!openChapterId) return
+    try {
+      localStorage.setItem(posKey, JSON.stringify({ chapterId: openChapterId, page }))
+    } catch {
+      /* storage full: just don't remember */
+    }
+  }
+
   // Back from PayMongo: ?payment=success. The webhook may land a few seconds later, so check a few times.
   useEffect(() => {
     if (params.get('payment') === 'success') {
@@ -104,6 +185,8 @@ export function StoryPage() {
   const readers = counts?.reader_count ?? s.reader_count
 
   const go = (i, { atEnd = false } = {}) => {
+    resumeAt.current = null
+    setResumed(false)
     setIndex(i)
     setFromEnd(atEnd)
     setTocOpen(false)
@@ -199,17 +282,33 @@ export function StoryPage() {
           <button className="btn-ghost mt-4 w-full lg:hidden" onClick={() => setTocOpen((o) => !o)}>
             {tocOpen ? 'Hide chapters' : 'Chapters'}
           </button>
+          {resumed && index > 0 && (
+            <button type="button" className="mt-4 flex w-full items-center gap-1.5 rounded-lg bg-brand/10 px-3 py-2 text-left text-xs text-brand hover:bg-brand/15" onClick={() => go(0)}>
+              <History className="h-3.5 w-3.5" /> Picked up where you left off. Start from Chapter 1
+            </button>
+          )}
           <nav className={`mt-4 space-y-1 ${tocOpen ? '' : 'hidden lg:block'}`}>
+            {readIds.size > 0 && (
+              <p className="px-3 pb-1 text-[11px] text-muted">
+                {s.chapters.filter((c) => readIds.has(c.id)).length} of {s.chapters.length} chapters read
+              </p>
+            )}
             {s.chapters.map((c, i) => (
               <button
                 key={c.id}
                 onClick={() => go(i)}
-                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
+                className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
                   i === index ? 'bg-brand/15 text-ink' : 'text-muted hover:bg-surface-2 hover:text-ink'
                 }`}
               >
                 <span className="truncate">{c.title}</span>
-                {c.content === null && <Lock className="h-3.5 w-3.5 shrink-0" aria-label="locked" />}
+                {c.content === null ? (
+                  <Lock className="h-3.5 w-3.5 shrink-0" aria-label="locked" />
+                ) : readIds.has(c.id) ? (
+                  <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-emerald-500/20 text-emerald-400" title="Read">
+                    <Check className="h-3 w-3" aria-label="read" />
+                  </span>
+                ) : null}
               </button>
             ))}
           </nav>
@@ -223,6 +322,8 @@ export function StoryPage() {
               <BookReader
                 contentKey={`${chapter?.id}-${s.has_access}`}
                 startAtEnd={fromEnd}
+                initialPage={resumeAt.current?.chapterId === chapter?.id ? resumeAt.current.page : null}
+                onPageChange={rememberPage}
                 hasPrev={index > 0}
                 hasNext={index < s.chapters.length - 1}
                 onPrevChapter={() => go(index - 1, { atEnd: true })}

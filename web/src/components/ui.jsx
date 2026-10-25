@@ -61,6 +61,45 @@ export function Field({ label, hint, children }) {
   )
 }
 
+/**
+ * A number box with − / + buttons instead of the browser's built-in arrows (which drew a second
+ * border inside the field). `prefix` shows e.g. "₱" in front. `onChange` gets the new text.
+ */
+export function NumberStepper({ value, onChange, min = 0, max, step = 1, prefix, disabled = false, label }) {
+  const number = Number(value || 0)
+  const clamp = (n) => Math.min(max ?? Infinity, Math.max(min, n))
+  const nudge = (delta) => onChange(String(Number(clamp(number + delta).toFixed(2))))
+  const button = 'grid w-9 shrink-0 place-items-center text-lg text-muted transition hover:bg-surface-2 hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent'
+  return (
+    <div
+      className={`flex items-stretch overflow-hidden rounded-xl border border-line bg-surface transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/30 ${disabled ? 'opacity-60' : ''}`}
+    >
+      <button type="button" className={button} onClick={() => nudge(-step)} disabled={disabled || number <= min} aria-label={`Less${label ? ` ${label}` : ''}`}>
+        −
+      </button>
+      <span className="flex min-w-0 flex-1 items-center justify-center gap-1 border-x border-line px-2">
+        {prefix && <span className="text-muted">{prefix}</span>}
+        <input
+          type="number"
+          inputMode="decimal"
+          className="w-full min-w-0 bg-transparent py-2.5 text-center text-ink outline-none"
+          value={value}
+          min={min}
+          max={max}
+          step={step}
+          disabled={disabled}
+          aria-label={label}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => value !== '' && onChange(String(clamp(number)))}
+        />
+      </span>
+      <button type="button" className={button} onClick={() => nudge(step)} disabled={disabled || (max !== undefined && number >= max)} aria-label={`More${label ? ` ${label}` : ''}`}>
+        +
+      </button>
+    </div>
+  )
+}
+
 const ToastContext = createContext(() => {})
 
 export function ToastProvider({ children }) {

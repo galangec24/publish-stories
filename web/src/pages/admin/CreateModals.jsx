@@ -21,7 +21,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { IconInput, Modal } from '../../components/Modal'
-import { GenreChips, useToast } from '../../components/ui'
+import { GenreChips, NumberStepper, useToast } from '../../components/ui'
 import { api } from '../../lib/api'
 import { titleStack } from '../../lib/fonts'
 import { TypographyPicker } from './StoryStudio'
@@ -489,9 +489,8 @@ export function NewStoryModal({ open, onClose }) {
                             ₱{p}
                           </button>
                         ))}
-                        <div className="relative w-28">
-                          <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted">₱</span>
-                          <input type="number" min="20" step="1" className="input !py-1.5 !pl-7" value={form.price} onChange={set('price')} aria-label="Custom price" />
+                        <div className="w-40">
+                          <NumberStepper value={form.price} onChange={(v) => setForm({ ...form, price: v })} min={20} step={1} prefix="₱" label="custom price" />
                         </div>
                       </div>
                       {priceError && <p className="text-xs text-rose-400">{priceError}</p>}
@@ -511,7 +510,9 @@ export function NewStoryModal({ open, onClose }) {
                               {n === 0 ? 'None' : `${n} chapter${n === 1 ? '' : 's'}`}
                             </button>
                           ))}
-                          <input type="number" min="0" max="50" className="input !w-20 !py-1.5" value={form.free_chapters} onChange={set('free_chapters')} aria-label="Free chapters" />
+                          <div className="w-32">
+                            <NumberStepper value={form.free_chapters} onChange={(v) => setForm({ ...form, free_chapters: v })} min={0} max={50} label="free chapters" />
+                          </div>
                         </div>
                       </div>
                     </div>

@@ -37,6 +37,15 @@ def progress(story, key):
     return len(read), len(to_read)
 
 
+def reading_position(request, story):
+    """Chapters this reader has opened, and the one they opened last (to continue reading)."""
+    key = reader_key(request)
+    if not key:
+        return {"read_chapters": [], "last_chapter": None}
+    reads = list(ChapterRead.objects.filter(story=story, reader_key=key).order_by("-last_opened_at").values_list("chapter_id", flat=True))
+    return {"read_chapters": reads, "last_chapter": reads[0] if reads else None}
+
+
 def rating_state(request, story):
     key = reader_key(request)
     mine = StoryRating.objects.filter(story=story, reader_key=key).values_list("stars", flat=True).first() if key else None
@@ -118,7 +127,9 @@ class ProgressView(APIView):
         key = reader_key(request)
         if key:
             try:
-                ChapterRead.objects.get_or_create(story=story, chapter_id=chapter_id, reader_key=key)
+                read, created = ChapterRead.objects.get_or_create(story=story, chapter_id=chapter_id, reader_key=key)
+                if not created:
+                    read.save(update_fields=["last_opened_at"])  # reopening it makes it "where I left off"
             except IntegrityError:
                 pass
         read, total = progress(story, key)

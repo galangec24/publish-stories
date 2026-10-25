@@ -73,6 +73,9 @@ class SearchSuggestView(APIView):
                     not s.title.lower().startswith(q.lower()),
                     s.id not in hot,
                     not (preferred & {g.id for g in s.genres.all()}),
+                    -s.like_count,
+                    -float(s.rating_avg),
+                    -s.rating_count,
                     -s.view_count,
                 )
             )
@@ -81,5 +84,5 @@ class SearchSuggestView(APIView):
             by_id = {s.id: s for s in stories.filter(id__in=hot)}
             results = [by_id[i] for i in hot if i in by_id]
             if len(results) < LIMIT:
-                results += list(stories.exclude(id__in=hot).order_by("-view_count")[: LIMIT - len(results)])
+                results += list(stories.exclude(id__in=hot).order_by("-like_count", "-rating_avg", "-view_count")[: LIMIT - len(results)])
         return Response({"query": q, "results": [suggestion(s, request, hot, preferred) for s in results]})

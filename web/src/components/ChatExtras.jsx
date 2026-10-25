@@ -5,10 +5,13 @@ import { api } from '../lib/api'
 import { useToast } from './ui'
 
 const EMOJIS = {
-  Smileys: '😀 😃 😄 😁 😆 😅 😂 🤣 😊 😇 🙂 😉 😍 🥰 😘 😋 😜 🤗 🤭 🤔 😐 😏 😌 😴 🥺 😢 😭 😤 😡 😱 😳 🤩 🥳 😎 🤓 🙃 😬 🫶',
-  Hands: '👍 👎 👏 🙌 🙏 🤝 👋 ✌️ 🤞 👌 🤙 💪 ✍️ 👀',
-  Hearts: '❤️ 🧡 💛 💚 💙 💜 🤍 🖤 💕 💖 💗 💔 ❣️ 💯',
-  Things: '📚 📖 ✏️ 📝 💌 🎉 🎁 🌸 🌹 🌻 🌙 ⭐ ✨ 🔥 ☕ 🍰 🇵🇭 ✅ ❓ ‼️',
+  Smileys: '😀 😃 😄 😁 😆 😅 😂 🤣 🥲 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😗 😙 😚 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🫢 🤫 🤔 🫡 🤐 🤨 😐 😑 😶 🫥 😏 😒 🙄 😬 😮‍💨 🤥 😴 🥱 😪 🤤 😷 🤒 🤕 🤢 🤮 🥵 🥶 🥴 😵 🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 🫤 😟 🙁 😮 😯 😲 😳 🥺 🥹 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 😤 😡 😠 🤬 😈 💀 🤡 👻 👽 🤖 😺 😸 😹 😻 😼 😽 🙀 😿 😾',
+  People: '👋 🤚 🖐️ ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🫰 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 🫶 👐 🤲 🤝 🙏 ✍️ 💅 💪 🦾 👀 👁️ 👄 🧠 👶 🧒 👦 👧 🧑 👩 👨 🧓 👵 👴 👩‍🏫 👨‍🏫 👩‍🎓 👨‍🎓 👩‍💻 ✍🏽 🙇 🙋 🙆 🙅 🤷 🤦 💃 🕺 👪 💑 💏',
+  Hearts: '❤️ 🧡 💛 💚 💙 🩵 💜 🤎 🖤 🩶 🤍 💔 ❤️‍🔥 ❤️‍🩹 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 💌 💋 💯 💢 💥 💫 💦 💨 🕊️',
+  Nature: '🌸 💮 🌹 🥀 🌺 🌻 🌼 🌷 🌱 🪴 🌲 🌳 🌴 🌵 🌾 🌿 ☘️ 🍀 🍁 🍂 🍃 🌍 🌏 🌙 🌛 ⭐ 🌟 ✨ ⚡ 🔥 🌈 ☀️ 🌤️ ⛅ 🌧️ ⛈️ 🌊 💧 ☔ 🐶 🐱 🐰 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🐦 🦋 🐝 🐞 🐢 🐠 🐬 🐳 🦀',
+  Food: '☕ 🍵 🧋 🥤 🍰 🎂 🧁 🍩 🍪 🍫 🍬 🍭 🍯 🍞 🥐 🍳 🍚 🍜 🍲 🍛 🍣 🍱 🥟 🍢 🍡 🍧 🍨 🍦 🥭 🍌 🍍 🥥 🍉 🍓 🍒 🍎 🍊 🍋',
+  Things: '📚 📖 📕 📗 📘 📙 📓 📔 📒 📝 ✏️ 🖊️ 🖋️ ✒️ 📜 📰 🗞️ 🔖 🏷️ 📌 📍 📎 🖇️ ✂️ 🗂️ 📅 🗓️ ⏰ ⌛ 🕯️ 💡 🔍 🔑 🗝️ 🎁 🎀 🎈 🎉 🎊 🏆 🥇 🎵 🎶 🎤 🎧 🎬 🎨 🖼️ 📷 📱 💻 ✉️ 📨 🏠 🏫 ⛪ 🕌 🏖️ 🏝️ ⛵ ✈️ 🚌 🚲 🇵🇭',
+  Symbols: '✅ ☑️ ✔️ ❌ ❎ ➕ ➖ ❓ ❔ ❗ ‼️ ⁉️ ⚠️ 🚫 💤 💬 💭 🗯️ ♻️ ⭕ 🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ 🔶 🔷 🔺 🔻 ▶️ ⏸️ ⏹️ 🔁 🔂 🆕 🆓 🆒 🆗 🔝 🔜 ♾️ ™️ ©️ ®️',
 }
 
 export function formatSize(bytes) {
@@ -147,9 +150,9 @@ export function useJumpToMessage(container) {
   return [highlighted, jump]
 }
 
-function EmojiPanel({ onPick }) {
+export function EmojiPanel({ onPick }) {
   return (
-    <div className="max-h-56 overflow-y-auto p-2">
+    <div className="max-h-64 overflow-y-auto p-2">
       {Object.entries(EMOJIS).map(([group, list]) => (
         <div key={group}>
           <p className="px-1 pt-1 text-[10px] font-semibold tracking-wide text-muted uppercase">{group}</p>

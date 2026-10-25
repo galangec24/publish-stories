@@ -27,6 +27,7 @@ import {
   Scissors,
   Search,
   Settings2,
+  Smile,
   Sparkles,
   Strikethrough,
   Trash2,
@@ -43,7 +44,8 @@ import Quill from 'quill'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
-import { Field, GenreChips, Spinner, useToast } from '../../components/ui'
+import { EmojiPanel } from '../../components/ChatExtras'
+import { Field, GenreChips, NumberStepper, Spinner, useToast } from '../../components/ui'
 import { api, ApiError } from '../../lib/api'
 import { wordCount } from '../../lib/delta'
 import { FONTS, FONT_FAMILIES, fontStack, IMAGE_WIDTHS, TEXT_SIZES, TITLE_FONTS, titleStack } from '../../lib/fonts'
@@ -86,6 +88,7 @@ export function StoryStudio() {
   const [navOpen, setNavOpen] = useState(() => window.innerWidth >= 900)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
+  const [emojiOpen, setEmojiOpen] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [headings, setHeadings] = useState([])
   const [words, setWords] = useState(0)
@@ -354,6 +357,13 @@ export function StoryStudio() {
     }
   }
 
+  // Emoji go in at the cursor, like any other character.
+  function insertEmoji(emoji) {
+    const range = q().getSelection(true)
+    q().insertText(range.index, emoji, 'user')
+    q().setSelection(range.index + emoji.length, 0, 'user')
+  }
+
   // Free chapters run in order from Chapter 1: freeing chapter i frees everything before it,
   // locking chapter i locks everything after it.
   async function toggleChapterLock(index) {
@@ -603,6 +613,14 @@ export function StoryStudio() {
               <Group label="Text">
                 <Big icon={ImagePlus} label="Image" onClick={() => imageInput.current?.click()} />
                 <Big icon={Sparkles} label="Scene break" onClick={sceneBreak} />
+                <span className="relative">
+                  <Big icon={Smile} label="Emoji" active={emojiOpen} onClick={() => setEmojiOpen((o) => !o)} />
+                  {emojiOpen && (
+                    <div className="card absolute top-full left-0 z-30 mt-1 w-80 p-0 shadow-2xl">
+                      <EmojiPanel onPick={insertEmoji} />
+                    </div>
+                  )}
+                </span>
                 <input
                   ref={imageInput}
                   type="file"
@@ -1002,16 +1020,7 @@ function PublishModal({ story, chapterCount, onCancel, onPublish }) {
             label="Price (₱)"
             hint={story.price_locked ? 'Locked: readers have already paid or sent a payment at this price.' : '0 = free · at least ₱20 for paid stories. You can change it until the first payment.'}
           >
-            <input
-              className="input"
-              type="number"
-              min="0"
-              step="1"
-              value={price}
-              disabled={story.price_locked}
-              onChange={(e) => setPrice(e.target.value)}
-              autoFocus
-            />
+            <NumberStepper value={price} onChange={setPrice} min={0} step={1} prefix="₱" disabled={story.price_locked} label="price" />
           </Field>
         )}
         {!freeByColumn && value > 0 && (
@@ -1119,10 +1128,10 @@ function SettingsDrawer({ story, genres, columns, onClose, onSave, onUploadCover
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Price (₱)" hint={story.price_locked ? 'locked: readers have paid' : '0 = free · min ₱20'}>
-              <input className="input" type="number" min="0" step="0.01" value={form.price} onChange={set('price')} disabled={story.price_locked} />
+              <NumberStepper value={form.price} onChange={(v) => setForm({ ...form, price: v })} min={0} step={1} prefix="₱" disabled={story.price_locked} label="price" />
             </Field>
             <Field label="Free chapters" hint={`of ${story.chapters?.length ?? 0} · 0 = none`}>
-              <input className="input" type="number" min="0" max="50" value={form.free_chapters} onChange={set('free_chapters')} />
+              <NumberStepper value={form.free_chapters} onChange={(v) => setForm({ ...form, free_chapters: v })} min={0} max={50} label="free chapters" />
             </Field>
           </div>
           <TypographyPicker

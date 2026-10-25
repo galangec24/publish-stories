@@ -85,6 +85,14 @@ class Story(models.Model):
             ("source_serif", "Source Serif"),
             ("inter", "Inter"),
             ("nunito", "Nunito"),
+            ("eb_garamond", "EB Garamond"),
+            ("crimson", "Crimson Pro"),
+            ("baskerville", "Libre Baskerville"),
+            ("noto_serif", "Noto Serif"),
+            ("poppins", "Poppins"),
+            ("quicksand", "Quicksand"),
+            ("atkinson", "Atkinson Hyperlegible"),
+            ("patrick_hand", "Patrick Hand"),
         ],
     )
     font_size = models.PositiveSmallIntegerField(default=18, help_text="Base reading size in px (14-26)")
@@ -101,6 +109,15 @@ class Story(models.Model):
             ("source_serif", "Source Serif"),
             ("inter", "Inter"),
             ("nunito", "Nunito"),
+            ("eb_garamond", "EB Garamond"),
+            ("crimson", "Crimson Pro"),
+            ("cormorant", "Cormorant Garamond"),
+            ("abril", "Abril Fatface"),
+            ("cinzel", "Cinzel"),
+            ("dancing", "Dancing Script"),
+            ("great_vibes", "Great Vibes"),
+            ("caveat", "Caveat"),
+            ("bebas", "Bebas Neue"),
         ],
     )
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT, db_index=True)
@@ -252,6 +269,7 @@ class ChapterRead(models.Model):
     chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name="reads")
     reader_key = models.CharField(max_length=80, db_index=True)  # "user:<id>" or a hashed device id
     created_at = models.DateTimeField(auto_now_add=True)
+    last_opened_at = models.DateTimeField(auto_now=True)  # the newest one is where the reader left off
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["chapter", "reader_key"], name="one_read_per_chapter_per_reader")]

@@ -103,6 +103,17 @@ body::before {
 @utility btn-ghost {
   @apply btn border border-line bg-surface/60 text-ink hover:bg-surface-2;
 }
+/* Number fields use our own − / + buttons; hide the browser's arrows, which drew a box inside the box. */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 @utility input {
   @apply w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-ink outline-none transition
     placeholder:text-muted focus:border-brand focus:ring-2 focus:ring-brand/30;
@@ -141,6 +152,31 @@ body::before {
 }
 .book-3d .gloss {
   background: linear-gradient(115deg, rgba(255, 255, 255, 0.28), transparent 38%, transparent 70%, rgba(0, 0, 0, 0.18));
+}
+/* Light that follows the cursor across the cover. */
+.book-3d .shine {
+  background: radial-gradient(circle at var(--shine-x, 30%) var(--shine-y, 20%), rgba(255, 255, 255, 0.35), transparent 45%);
+  mix-blend-mode: soft-light;
+}
+.book-3d .spine-title {
+  position: absolute;
+  inset: 6px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.85);
+}
+/* Designed covers (no picture uploaded): a faint linen texture and vignette. */
+.book-cover-art {
+  background:
+    radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.12), transparent 60%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.025) 0 2px, transparent 2px 5px),
+    radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.35));
 }
 
 /* --- Reader typography (Delta renderer output) ------------------------- */

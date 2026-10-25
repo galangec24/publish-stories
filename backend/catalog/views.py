@@ -12,6 +12,7 @@ from payments.models import Subscription
 from .analytics import platform_stats, record_view
 from .models import Chapter, Column, Genre, Story
 from .paywall import has_full_access, reader_chapters
+from .ratings import reading_position
 from .serializers import ColumnSerializer, GenreSerializer, StoryListSerializer
 
 SHELF_SIZE = 12
@@ -42,8 +43,11 @@ def filter_stories(queryset, params):
         queryset = queryset.filter(Q(title__icontains=q) | Q(synopsis__icontains=q) | Q(author_name__icontains=q))
     if params.get("free") in {"1", "true"}:
         queryset = queryset.filter(Q(price__lte=0) | Q(column__is_public=True))
-    if params.get("ordering") in {"popular", "readers"}:
-        queryset = queryset.order_by("-view_count" if params["ordering"] == "popular" else "-reader_count")
+    ordering = params.get("ordering")
+    if ordering in {"popular", "readers"}:
+        queryset = queryset.order_by("-view_count" if ordering == "popular" else "-reader_count")
+    elif ordering == "best":
+        queryset = queryset.order_by("-like_count", "-rating_avg", "-rating_count", "-published_at")
     return queryset
 
 
@@ -57,12 +61,12 @@ class GenreListView(generics.ListAPIView):
 
 
 class ColumnListView(APIView):
-    """GET /api/columns/ — the Columns tab: public columns, and any column with published pieces (newest first)."""
+    """GET /api/columns/ — the Columns tab: public columns, and any column with published pieces (most liked first)."""
 
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        stories = published_stories().order_by("-published_at")
+        stories = published_stories().order_by("-like_count", "-rating_avg", "-rating_count", "-published_at")
         columns = Column.objects.annotate(
             story_count=Count("stories", filter=Q(stories__status=Story.Status.PUBLISHED))
         ).filter(Q(story_count__gt=0) | Q(is_public=True)).order_by("title")
@@ -120,7 +124,7 @@ class StoryDetailView(APIView):
             mine = purchases_for(request, story).filter(provider=Subscription.Provider.MANUAL)
             latest = mine.select_related("story", "method").order_by("-created_at").first()
             purchase = PurchaseSerializer(latest).data if latest else None
-        data.update(chapters=chapters, locked=locked, has_access=full_access, purchase=purchase)
+        data.update(chapters=chapters, locked=locked, has_access=full_access, purchase=purchase, **reading_position(request, story))
         return Response(data)
 
 
@@ -158,18 +162,22 @@ class HomeView(APIView):
         def shelf(queryset):
             return StoryListSerializer(queryset[:SHELF_SIZE], many=True, context=ctx).data
 
+        def best(queryset):
+            """Most liked first, then the best rated (and most rated), then the newest."""
+            return queryset.order_by("-like_count", "-rating_avg", "-rating_count", "-published_at")
+
         for_you = []
         user = request.user
         if user.is_authenticated:
             preferred = list(user.preferred_genres.values_list("id", flat=True))
             if preferred:
-                for_you = shelf(stories.filter(genres__in=preferred).distinct())
+                for_you = shelf(best(stories.filter(genres__in=preferred).distinct()))
 
         genres = Genre.objects.filter(is_active=True).annotate(
             published=Count("stories", filter=Q(stories__status=Story.Status.PUBLISHED, stories__column__isnull=True))
         ).order_by("sort_order", "name")  # Meta.ordering is dropped from GROUP BY queries
         by_genre = [
-            {"genre": GenreSerializer(genre).data, "stories": shelf(stories.filter(genres=genre))}
+            {"genre": GenreSerializer(genre).data, "stories": shelf(best(stories.filter(genres=genre)))}
             for genre in genres
             if genre.published
         ][:8]
@@ -180,9 +188,9 @@ class HomeView(APIView):
                 "has_columns": Column.objects.filter(Q(is_public=True) | Q(stories__status=Story.Status.PUBLISHED)).exists(),
                 "for_you": for_you,
                 "latest": shelf(stories),
-                "free": shelf(stories.filter(Q(price__lte=0) | Q(column__is_public=True))),
+                "free": shelf(best(stories.filter(Q(price__lte=0) | Q(column__is_public=True)))),
                 "by_genre": by_genre,
-                "popular": shelf(stories.filter(view_count__gt=0).order_by("-view_count")),
+                "popular": shelf(stories.filter(view_count__gt=0).order_by("-view_count", "-like_count", "-rating_avg")),
                 "stats": platform_stats(),
             }
         )

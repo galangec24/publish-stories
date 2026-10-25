@@ -2,7 +2,7 @@ import { AlertTriangle, CheckCircle2, FileText, FileType2, Tags, UploadCloud, X 
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { Field, GenreChips, useToast } from '../../components/ui'
+import { Field, GenreChips, NumberStepper, useToast } from '../../components/ui'
 import { api, ApiError } from '../../lib/api'
 import { useAsync } from '../../lib/useAsync'
 
@@ -103,10 +103,10 @@ export function BulkImport() {
             </select>
           </Field>
           <Field label="Price (₱)" hint="0 = free · min ₱20">
-            <input className="input" type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
+            <NumberStepper value={price} onChange={setPrice} min={0} step={1} prefix="₱" label="price" />
           </Field>
           <Field label="Free chapters" hint="0 = none">
-            <input className="input" type="number" min="0" max="50" value={freeChapters} onChange={(e) => setFreeChapters(e.target.value)} />
+            <NumberStepper value={freeChapters} onChange={setFreeChapters} min={0} max={50} label="free chapters" />
           </Field>
         </div>
         <label className="flex items-center gap-3 text-sm">

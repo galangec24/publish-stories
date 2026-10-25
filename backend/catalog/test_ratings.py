@@ -59,3 +59,46 @@ class RatingTests(APITestCase):
         admin = User.objects.create_user(email="a@example.com", password="x", is_admin=True)
         self.client.force_authenticate(admin)
         self.assertEqual(self.client.post(f"{self.url}/rating/", {"stars": 5}, format="json").status_code, 403)
+
+
+class OrderingAndProgressTests(APITestCase):
+    def test_shelves_put_most_liked_then_best_rated_first(self):
+        from .models import Genre
+
+        romance = Genre.objects.create(name="Romance")
+        quiet = Story.objects.create(title="Quiet", status="published", like_count=1, rating_avg=5, rating_count=1)
+        loved = Story.objects.create(title="Loved", status="published", like_count=9, rating_avg=3, rating_count=4)
+        tied = Story.objects.create(title="Tied but better rated", status="published", like_count=9, rating_avg=4.5, rating_count=2)
+        for story in (quiet, loved, tied):
+            story.genres.add(romance)
+        reader = User.objects.create_user(email="r@example.com", password="x")
+        reader.preferred_genres.add(romance)
+        self.client.force_authenticate(reader)
+        home = self.client.get("/api/home/").data
+        expected = ["Tied but better rated", "Loved", "Quiet"]
+        self.assertEqual([s["title"] for s in home["for_you"]], expected)
+        self.assertEqual([s["title"] for s in home["by_genre"][0]["stories"]], expected)
+        self.assertEqual([s["title"] for s in home["free"]], expected)
+        self.assertEqual([s["title"] for s in self.client.get("/api/stories/", {"ordering": "best"}).data["results"]], expected)
+
+    def test_story_remembers_read_chapters_and_where_you_left_off(self):
+        story = Story.objects.create(title="Long", status="published")
+        one, two, three = (Chapter.objects.create(story=story, title=f"C{i}", order=i, content=[{"insert": "x\n"}], word_count=1) for i in range(3))
+        guest = {"HTTP_X_VIEWER_ID": DEVICE}
+        url = f"/api/stories/{story.slug}"
+        self.assertEqual(self.client.get(f"{url}/", **guest).data["last_chapter"], None)
+        for chapter in (one, three, two):
+            self.client.post(f"{url}/progress/", {"chapter": chapter.id}, format="json", **guest)
+        data = self.client.get(f"{url}/", **guest).data
+        self.assertEqual(sorted(data["read_chapters"]), sorted([one.id, two.id, three.id]))
+        self.assertEqual(data["last_chapter"], two.id)
+        self.client.post(f"{url}/progress/", {"chapter": one.id}, format="json", **guest)  # went back to chapter 1
+        self.assertEqual(self.client.get(f"{url}/", **guest).data["last_chapter"], one.id)
+        self.assertEqual(self.client.get(f"{url}/", HTTP_X_VIEWER_ID="someone-else-0009-zzzz").data["read_chapters"], [])
+
+    def test_new_fonts_are_accepted(self):
+        admin = User.objects.create_user(email="a@example.com", password="x", is_admin=True)
+        self.client.force_authenticate(admin)
+        made = self.client.post("/api/admin/stories/", {"title": "Fonts", "font_family": "eb_garamond", "title_font": "great_vibes"}, format="json")
+        self.assertEqual((made.data["font_family"], made.data["title_font"]), ("eb_garamond", "great_vibes"))
+        self.assertEqual(self.client.post("/api/admin/stories/", {"title": "Bad", "font_family": "comic_sans"}, format="json").status_code, 400)
