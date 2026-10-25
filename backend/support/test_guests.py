@@ -26,8 +26,9 @@ class GuestSupportTests(APITestCase):
 
         again = self.client.get("/api/support/", **PHONE).data
         self.assertEqual([m["body"] for m in again["messages"]], ["How do I pay with BPI?"])
-        # Someone else on the same Wi-Fi (same IP) must not see it.
-        self.assertEqual(self.client.get("/api/support/", **SAME_WIFI).data["messages"], [])
+        # Another device on the same connection picks up the latest conversation; another network doesn't.
+        self.assertEqual(self.client.get("/api/support/", **SAME_WIFI).data["messages"][0]["body"], "How do I pay with BPI?")
+        self.assertEqual(self.client.get("/api/support/", **ELSEWHERE).data["messages"], [])
 
         self.client.force_authenticate(self.admin)
         inbox = self.client.get("/api/admin/support/").data["results"][0]
@@ -91,26 +92,27 @@ class ResumeConversationTests(APITestCase):
         self.client.post("/api/support/messages/", {"body": "Hello from my phone"}, format="json", **PHONE)
         return self.client.get("/api/support/", **PHONE).data["resume_code"]
 
-    def test_same_network_is_offered_but_needs_the_email(self):
+    def test_same_connection_picks_up_the_latest_and_can_switch(self):
         self.start(email="lia@example.com")
-        offer = self.client.get("/api/support/", **INCOGNITO).data
-        self.assertEqual(offer["messages"], [])  # nothing shown before proof
-        self.assertEqual(offer["resume"], {"available": True, "with_email": True})
-
-        wrong = self.client.post("/api/support/resume/", {"email": "someone@example.com"}, format="json", **INCOGNITO)
-        self.assertEqual(wrong.status_code, 400)
-        ok = self.client.post("/api/support/resume/", {"email": "LIA@example.com"}, format="json", **INCOGNITO)
-        self.assertEqual([m["body"] for m in ok.data["messages"]], ["Hello from my phone"])
+        # A second guest at the same address starts their own thread...
+        self.client.post("/api/support/messages/", {"body": "Hi from the laptop"}, format="json", **SAME_WIFI)
+        # ...which is newer, so a third device (incognito) lands on it and can switch to the other.
+        opened = self.client.get("/api/support/", **INCOGNITO).data
+        self.assertEqual(opened["messages"][0]["body"], "Hi from the laptop")
+        self.assertEqual(len(opened["others"]), 2)
+        older = next(o for o in opened["others"] if not o["current"])
+        self.assertEqual(older["name"], "Lia")
+        switched = self.client.post("/api/support/switch/", {"id": older["id"]}, format="json", **INCOGNITO).data
+        self.assertEqual(switched["messages"][0]["body"], "Hello from my phone")
         self.assertEqual(self.client.get("/api/support/", **INCOGNITO).data["messages"][0]["body"], "Hello from my phone")
-
-        # The email only works from the network the conversation came from.
-        self.assertEqual(self.client.post("/api/support/resume/", {"email": "lia@example.com"}, format="json", **ELSEWHERE).status_code, 400)
-        self.assertFalse(self.client.get("/api/support/", **ELSEWHERE).data["resume"]["available"])
+        # The phone keeps its conversation: it is shared, not moved.
+        self.assertEqual(self.client.get("/api/support/", **PHONE).data["messages"][0]["body"], "Hello from my phone")
+        # Another network can't switch into it.
+        self.assertEqual(self.client.post("/api/support/switch/", {"id": older["id"]}, format="json", **ELSEWHERE).status_code, 404)
 
     def test_chat_code_works_anywhere(self):
         code = self.start()
         self.assertRegex(code, r"^[A-Z2-9]{4}-[A-Z2-9]{4}$")
-        self.assertEqual(self.client.get("/api/support/", **INCOGNITO).data["resume"], {"available": True, "with_email": False})
         ok = self.client.post("/api/support/resume/", {"code": code.lower().replace("-", " ")}, format="json", **ELSEWHERE)
         self.assertEqual(ok.status_code, 200, ok.data)
         self.assertEqual(ok.data["messages"][0]["body"], "Hello from my phone")
@@ -207,3 +209,26 @@ class ReactionsSeenAndCountsTests(APITestCase):
         self.assertEqual(self.client.get("/api/support/unread/").data["unread"], 2)
         # Seen: the admin opened the thread, so the reader's side shows nothing unread for support.
         self.assertEqual(self.client.get("/api/support/").data["unread_for_admin"], 0)
+
+
+class NotificationsClearWhenReadTests(APITestCase):
+    def test_opening_the_conversation_clears_its_notifications(self):
+        cache.clear()
+        admin = User.objects.create_user(email="admin@example.com", password="x", is_admin=True)
+        reader = User.objects.create_user(email="r@example.com", password="x")
+        self.client.force_authenticate(reader)
+        self.client.post("/api/support/messages/", {"body": "One"}, format="json")
+        self.client.post("/api/support/messages/", {"body": "Two"}, format="json")
+        conversation = Conversation.objects.get()
+        self.assertEqual(admin.notifications.filter(is_read=False).count(), 2)
+        self.assertEqual(admin.notifications.first().link, f"/admin/support?c={conversation.id}")
+
+        self.client.force_authenticate(admin)
+        self.client.get(f"/api/admin/support/{conversation.id}/")  # admin reads it
+        self.assertEqual(admin.notifications.filter(is_read=False).count(), 0)
+        self.client.post(f"/api/admin/support/{conversation.id}/messages/", {"body": "Hello"}, format="json")
+
+        self.client.force_authenticate(reader)
+        self.assertEqual(reader.notifications.filter(is_read=False).count(), 1)
+        self.client.get("/api/support/")  # reader opens the chat
+        self.assertEqual(reader.notifications.filter(is_read=False).count(), 0)

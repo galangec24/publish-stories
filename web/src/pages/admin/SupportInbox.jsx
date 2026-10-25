@@ -1,5 +1,6 @@
 import { ArrowLeft, Inbox, Mail } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { ChatBubble, ChatComposer, previewOf, replaceMessage, sendChatMessage, useJumpToMessage } from '../../components/ChatExtras'
 import { Avatar } from '../../components/HeaderMenus'
@@ -25,6 +26,13 @@ export function SupportInbox() {
   useEffect(() => {
     loadThreads().catch((e) => toast(e, 'error'))
   }, [loadThreads, toast])
+
+  // From a notification: /admin/support?c=12 opens that conversation.
+  const [params] = useSearchParams()
+  const wanted = Number(params.get('c'))
+  useEffect(() => {
+    if (wanted && wanted !== activeRef.current) openThread(wanted).catch(() => {})
+  }, [wanted]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const openThread = useCallback(
     async (id) => {

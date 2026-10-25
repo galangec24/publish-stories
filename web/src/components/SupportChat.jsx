@@ -87,12 +87,12 @@ function GuestDetails({ details, onSaved }) {
  * A guest on a new device (or incognito) can pick up an earlier conversation.
  * The network only suggests it; the email they left, or their chat code, proves it's theirs.
  */
-function ResumeCard({ offer, onResumed }) {
+function ResumeCard({ onResumed }) {
   const toast = useToast()
-  const [mode, setMode] = useState(offer?.available && offer.with_email ? 'email' : 'code')
+  const [mode, setMode] = useState('code')
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
-  const [open, setOpen] = useState(Boolean(offer?.available))
+  const [open, setOpen] = useState(false)
 
   async function resume(e) {
     e.preventDefault()
@@ -110,13 +110,13 @@ function ResumeCard({ offer, onResumed }) {
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)} className="w-full border-b border-line px-3 py-1.5 text-left text-xs text-brand hover:underline">
-        Chatted with us before? Continue that conversation
+        Chatted with us on another phone or network? Use your chat code
       </button>
     )
   }
   return (
     <form onSubmit={resume} className="space-y-2 border-b border-line bg-surface-2/50 p-3 text-xs">
-      <p className="font-medium text-ink">{offer?.available ? 'Welcome back! Continue your earlier conversation?' : 'Continue an earlier conversation'}</p>
+      <p className="font-medium text-ink">Continue an earlier conversation</p>
       <p className="text-muted">
         {mode === 'email' ? 'Enter the email you gave us.' : 'Enter the chat code shown at the top of your earlier chat.'}
       </p>
@@ -142,6 +142,48 @@ function ResumeCard({ offer, onResumed }) {
         </button>
       </div>
     </form>
+  )
+}
+
+/** Guests sharing a connection (e.g. a family at home) can have several chats; pick which one to continue. */
+function ConversationSwitcher({ others, onSwitched }) {
+  const toast = useToast()
+  const [open, setOpen] = useState(false)
+  if (!others?.length) return null
+
+  async function pick(id) {
+    setOpen(false)
+    try {
+      onSwitched(await api.post('support/switch/', { id }))
+    } catch (e) {
+      toast(e, 'error')
+    }
+  }
+
+  return (
+    <div className="border-b border-line text-xs">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between px-3 py-1.5 text-muted hover:text-ink">
+        <span>Conversations on this connection ({others.length})</span>
+        <span>{open ? '▴' : '▾'}</span>
+      </button>
+      {open && (
+        <ul className="max-h-40 overflow-y-auto pb-1">
+          {others.map((o) => (
+            <li key={o.id}>
+              <button
+                type="button"
+                disabled={o.current}
+                onClick={() => pick(o.id)}
+                className={`flex w-full items-center justify-between px-3 py-1.5 text-left ${o.current ? 'bg-brand/10 font-semibold text-ink' : 'hover:bg-surface-2'}`}
+              >
+                <span className="truncate">{o.name}</span>
+                <span className="shrink-0 text-muted">{o.current ? 'Open' : o.last_message_at ? timeAgo(o.last_message_at) : ''}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
 
@@ -307,9 +349,18 @@ export function SupportChat() {
             </button>
           </header>
 
-          {!user && thread && !thread.id && (
+          {!user && thread && (
+            <ConversationSwitcher
+              others={thread.others}
+              onSwitched={(t) => {
+                lastSeen.current = t.messages[t.messages.length - 1]?.id ?? null
+                setReplyTo(null)
+                setThread(t)
+              }}
+            />
+          )}
+          {!user && thread && !thread.messages?.length && (
             <ResumeCard
-              offer={thread.resume}
               onResumed={(t) => {
                 lastSeen.current = t.messages[t.messages.length - 1]?.id ?? null
                 setThread(t)

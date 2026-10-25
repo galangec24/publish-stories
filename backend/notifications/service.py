@@ -42,3 +42,16 @@ def first_name(user):
     if user.display_name:
         return user.display_name.split()[0]
     return user.email.split("@")[0]
+
+
+def mark_read(queryset):
+    """Mark these notifications read and update each owner's bell live."""
+    by_user = {}
+    for pk, user_id in queryset.values_list("pk", "user_id"):
+        by_user.setdefault(user_id, []).append(pk)
+    if not by_user:
+        return
+    Notification.objects.filter(pk__in=[pk for ids in by_user.values() for pk in ids]).update(is_read=True)
+    for user_id, ids in by_user.items():
+        unread = Notification.objects.filter(user_id=user_id, is_read=False).count()
+        push_user(user_id, "notifications.read", {"ids": ids, "unread_count": unread})

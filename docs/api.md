@@ -62,7 +62,9 @@ Legend: 🌐 anyone · 👤 signed in · 🛡️ admin
 | `GET support/`, `POST support/messages/` | 🌐 | My conversation, by account or (for guests) by this device. Messages take `body`, `gif_url` and/or a `file` (multipart), plus an optional `reply_to` (a message id in the same thread). Guests are limited to 20 messages an hour per IP |
 | `GET support/unread/` | 🌐 | `{unread}`: support replies not read yet (doesn't mark them read) |
 | `PATCH support/` | 🌐 guests | `{name, email}` so support can reply by email too |
-| `POST support/resume/` | 🌐 guests | `{email}` (same network) or `{code}` (anywhere): continue an earlier guest conversation on this device. `GET support/` returns `resume.available` when one exists on this network |
+| `POST support/switch/` | 🌐 guests | `{id}`: continue another recent conversation from the same connection (`GET support/` lists them in `others`) |
+| `POST support/messages/<id>/react/`, `POST admin/support/messages/<id>/react/` | 🌐 / 🛡️ | `{emoji}` (❤️ 😆 😮 😢 😡 👍; the same again removes it) |
+| `POST support/resume/` | 🌐 guests | `{email}` (same connection) or `{code}` (anywhere): continue an earlier guest conversation on this device. A new device on the same connection picks up the latest conversation automatically |
 | `GET support/files/<message id>/` | 🌐 / 🛡️ | Download an attachment (the account or device that owns the thread, or an admin) |
 | `GET support/gifs/?q=` | 🌐 | GIPHY search through the server |
 | WebSocket `wss://…/ws/?token=<JWT>` | 👤 | Live events |

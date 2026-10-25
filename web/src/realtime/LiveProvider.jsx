@@ -52,6 +52,17 @@ export function LiveProvider({ children }) {
     [toast],
   )
 
+  // Notifications read elsewhere (e.g. by opening the chat they were about) clear here too.
+  useEffect(
+    () =>
+      on('notifications.read', ({ ids, unread_count }) => {
+        const read = new Set(ids)
+        setItems((list) => list.map((n) => (read.has(n.id) ? { ...n, is_read: true } : n)))
+        setUnread(unread_count)
+      }),
+    [],
+  )
+
   const markRead = useCallback(async (id) => {
     let wasUnread = false
     setItems((list) =>

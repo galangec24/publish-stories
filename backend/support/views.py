@@ -20,11 +20,12 @@ from accounts.permissions import IsAdmin
 from notifications.realtime import push_admins, push_user
 from payments.access import client_ip, device_key, network_key
 from payments.models import new_access_code
-from notifications.service import first_name, notify, notify_admins
+from notifications.models import Notification
+from notifications.service import first_name, mark_read, notify, notify_admins
 
 from . import storage
 from .gifs import is_gif_url
-from .models import Conversation, Message
+from .models import Conversation, GuestDevice, Message
 
 logger = logging.getLogger(__name__)
 HISTORY = 200
@@ -176,14 +177,13 @@ def conversation_for(request, create=False, lock=False):
     """This reader's thread: by account, or by device for guests.
 
     A guest thread from this device moves into the account when the reader signs in.
-    The IP is never used to find a thread: many people share one (mobile data, a home),
-    and they must not see each other's messages.
     """
     queryset = Conversation.objects.select_for_update() if lock else Conversation.objects
     device = device_key(request)
     if request.user.is_authenticated:
         conversation = queryset.filter(user=request.user).first()
-        guest = queryset.filter(user__isnull=True, guest_key=device).first() if device else None
+        link = GuestDevice.objects.filter(device_key=device).select_related("conversation").first() if device else None
+        guest = link.conversation if link and link.conversation.user_id is None else None
         if guest:
             if conversation is None:
                 guest.user, guest.guest_key = request.user, ""
@@ -197,17 +197,28 @@ def conversation_for(request, create=False, lock=False):
                 )
                 guest.delete()
                 conversation.refresh_from_db()
+            GuestDevice.objects.filter(conversation=conversation).delete()  # it belongs to the account now
         if conversation is None and create:
             conversation = Conversation.objects.create(user=request.user)
         return conversation
     if not device:
         return None
-    conversation = queryset.filter(user__isnull=True, guest_key=device).first()
+    link = GuestDevice.objects.filter(device_key=device, conversation__user__isnull=True).first()
+    conversation = queryset.filter(pk=link.conversation_id).first() if link else None
     if conversation is None and create:
         conversation = Conversation.objects.create(
             guest_key=device, guest_ip=masked_ip(request), guest_network=network_key(request), resume_code=fresh_resume_code()
         )
+        attach_device(conversation, device)
     return conversation
+
+
+def attach_device(conversation, device):
+    """Let this device follow `conversation`; an empty thread it had before is dropped."""
+    previous = GuestDevice.objects.filter(device_key=device).exclude(conversation=conversation).select_related("conversation").first()
+    GuestDevice.objects.update_or_create(device_key=device, defaults={"conversation": conversation})
+    if previous and not previous.conversation.messages.exists() and not previous.conversation.devices.exists():
+        previous.conversation.delete()
 
 
 def fresh_resume_code():
@@ -218,16 +229,19 @@ def fresh_resume_code():
     raise RuntimeError("Couldn't make a unique chat code")
 
 
-def earlier_thread_on_network(request):
-    """A recent guest thread from this network, offered (never shown) to a device that lost its id."""
+def network_threads(request):
+    """Recent guest threads from this internet connection, newest first.
+
+    A new device on the same connection picks up the latest one automatically, and can switch
+    to the others (for example two people at home). Note: people sharing a connection (a
+    household, mobile data) can reach each other's guest chats; the chat code works anywhere.
+    """
     network = network_key(request)
     if not network:
-        return None
+        return []
     since = timezone.now() - timedelta(days=RESUME_DAYS)
-    return (
-        Conversation.objects.filter(user__isnull=True, guest_network=network, last_message_at__gte=since)
-        .order_by("-last_message_at")
-        .first()
+    return list(
+        Conversation.objects.filter(user__isnull=True, guest_network=network, last_message_at__gte=since).order_by("-last_message_at")[:6]
     )
 
 
@@ -248,23 +262,21 @@ class MyConversationView(APIView):
     def get(self, request):
         conversation = conversation_for(request, create=request.user.is_authenticated)
         if conversation is None:
-            if not request.user.is_authenticated and not device_key(request):
+            device = device_key(request)
+            if not request.user.is_authenticated and not device:
                 return Response({"detail": "Allow this site to store data so we can keep your conversation."}, status=400)
-            earlier = earlier_thread_on_network(request)
-            return Response(
-                {
-                    "id": None,
-                    "messages": [],
-                    "user": {"is_guest": True, "first_name": "", "email": ""},
-                    # Only says that a thread exists here; proving it's yours needs the email or the chat code.
-                    "resume": {"available": bool(earlier), "with_email": bool(earlier and earlier.guest_email)},
-                }
-            )
+            latest = network_threads(request)
+            if not latest:
+                return Response({"id": None, "messages": [], "user": {"is_guest": True, "first_name": "", "email": ""}, "others": []})
+            conversation = latest[0]  # pick up the latest conversation from this connection
+            attach_device(conversation, device)
         if conversation.unread_for_user:
             Conversation.objects.filter(pk=conversation.pk).update(unread_for_user=0)
             conversation.unread_for_user = 0
             push_admins("support.seen", {"id": conversation.pk, "by": "reader"})  # admins see "Seen"
-        return Response(my_thread(conversation))
+        if request.user.is_authenticated:  # the bell clears too
+            mark_read(Notification.objects.filter(user=request.user, kind="support_reply", is_read=False))
+        return Response(my_thread(conversation, request))
 
     def patch(self, request):
         if request.user.is_authenticated:
@@ -277,18 +289,53 @@ class MyConversationView(APIView):
         conversation.guest_name = data.validated_data.get("name", conversation.guest_name).strip()
         conversation.guest_email = data.validated_data.get("email", conversation.guest_email).strip()
         conversation.save(update_fields=["guest_name", "guest_email"])
-        return Response(my_thread(conversation))
+        return Response(my_thread(conversation, request))
 
 
-def my_thread(conversation):
-    """The reader's own view of their thread (guests also get their chat code)."""
+def my_thread(conversation, request=None):
+    """The reader's own view of their thread. Guests also get their chat code and the other
+    recent conversations from their connection, to switch between."""
     data = {**serialize_conversation(conversation), "messages": history(conversation)}
     if conversation.user_id is None:
         if not conversation.resume_code:
             conversation.resume_code = fresh_resume_code()
             conversation.save(update_fields=["resume_code"])
         data["resume_code"] = conversation.resume_code
+        threads = network_threads(request) if request else []
+        if threads and conversation.id not in {t.id for t in threads}:
+            threads = [conversation, *threads]
+        data["others"] = [
+            {
+                "id": t.id,
+                "name": t.guest_name or "Guest",
+                "last_message_at": t.last_message_at.isoformat() if t.last_message_at else None,
+                "current": t.id == conversation.id,
+            }
+            for t in threads
+        ] if len(threads) > 1 else []
     return data
+
+
+class SwitchView(APIView):
+    """POST /api/support/switch/ {"id": n} — a guest picks another recent conversation from their connection."""
+
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "access_claim"
+
+    def post(self, request):
+        device = device_key(request)
+        if request.user.is_authenticated or not device:
+            return Response({"detail": "Only for guests on this device."}, status=400)
+        try:
+            wanted = int(request.data.get("id"))
+        except (TypeError, ValueError):
+            wanted = None
+        target = next((t for t in network_threads(request) if t.id == wanted), None)
+        if target is None:
+            return Response({"detail": "That conversation isn't available on this connection."}, status=404)
+        attach_device(target, device)
+        return Response(my_thread(target, request))
 
 
 class ReactionInput(serializers.Serializer):
@@ -370,20 +417,11 @@ class ResumeView(APIView):
         if len(code) == 8:
             found = Conversation.objects.filter(user__isnull=True, resume_code=f"{code[:4]}-{code[4:]}").first()
         elif email:
-            earlier = earlier_thread_on_network(request)
-            if earlier and earlier.guest_email and earlier.guest_email.lower() == email.lower():
-                found = earlier
+            found = next((t for t in network_threads(request) if t.guest_email and t.guest_email.lower() == email.lower()), None)
         if found is None:
             return Response({"detail": "That doesn't match an earlier conversation."}, status=400)
-        with transaction.atomic():
-            mine = Conversation.objects.filter(user__isnull=True, guest_key=device).exclude(pk=found.pk).first()
-            if mine:  # a fresh thread on this device joins the earlier one
-                mine.messages.update(conversation=found)
-                mine.delete()
-            found.guest_key = device
-            found.guest_network = network_key(request) or found.guest_network
-            found.save(update_fields=["guest_key", "guest_network"])
-        return Response(my_thread(found))
+        attach_device(found, device)
+        return Response(my_thread(found, request))
 
 
 class MySendView(APIView):
@@ -423,7 +461,7 @@ class MySendView(APIView):
                 if sender
                 else f"guest {conversation.guest_name or ''}{f' ({conversation.guest_email})' if conversation.guest_email else ''}".strip()
             )
-            notify_admins("support_message", f"New message from {who}", preview_text(message), "/admin/support")
+            notify_admins("support_message", f"New message from {who}", preview_text(message), f"/admin/support?c={conversation.pk}")
         return Response(serialize_message(message), status=201)
 
 
@@ -456,6 +494,8 @@ class AdminConversationView(APIView):
             push_admins("support.read", {"id": pk})
             if conversation.user_id:  # the reader sees "Seen" under their message
                 push_user(conversation.user_id, "support.seen", {"id": pk, "by": "admin"})
+        # Every admin's bell clears for this conversation once one of them has read it.
+        mark_read(Notification.objects.filter(kind="support_message", link=f"/admin/support?c={pk}", is_read=False))
         return Response({**serialize_conversation(conversation), "messages": history(conversation)})
 
 
@@ -513,7 +553,7 @@ class FileView(APIView):
         message = get_object_or_404(Message.objects.select_related("conversation"), pk=pk)
         conversation, user, device = message.conversation, request.user, device_key(request)
         allowed = (user.is_authenticated and (user.is_admin or conversation.user_id == user.pk)) or (
-            conversation.user_id is None and device and conversation.guest_key == device
+            conversation.user_id is None and device and GuestDevice.objects.filter(conversation=conversation, device_key=device).exists()
         )
         if not message.file_key or not allowed:
             return Response({"detail": "Not found."}, status=404)

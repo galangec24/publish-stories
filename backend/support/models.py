@@ -57,3 +57,12 @@ class StoredFile(models.Model):
     key = models.CharField(max_length=200, unique=True)
     data = models.BinaryField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class GuestDevice(models.Model):
+    """A device (hashed id) that opens a guest conversation. A thread can have several devices
+    (phone, laptop, incognito), each device follows one thread at a time."""
+
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="devices")
+    device_key = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)

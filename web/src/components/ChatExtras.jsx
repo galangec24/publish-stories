@@ -113,7 +113,7 @@ export function MessageContent({ m, mine, onJump }) {
 export const REACTIONS = ['❤️', '😆', '😮', '😢', '😡', '👍']
 
 /**
- * One chat message, Messenger-style: Reply and React on hover (or tap the icons on a phone),
+ * One chat message, Messenger-style: React and Reply buttons beside it,
  * quotes that jump to the original, reactions under the bubble and an optional "Seen" mark.
  * `side` is who is looking ("reader" or "admin"), so their own reaction is highlighted.
  */
@@ -130,11 +130,12 @@ export function ChatBubble({ m, mine, side, onReply, onReact, onJump, label, hig
     return () => document.removeEventListener('pointerdown', close)
   }, [picking])
 
-  const action = 'rounded-full p-1.5 text-muted opacity-60 transition hover:bg-surface-2 hover:text-ink sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100'
+  const action = 'shrink-0 rounded-full p-1.5 text-muted transition hover:bg-surface-2 hover:text-ink'
   return (
     <div id={`msg-${m.id}`} className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
-      <div ref={box} className={`group relative flex max-w-full items-center gap-0.5 ${mine ? 'flex-row-reverse' : ''}`}>
-        <div className={`relative max-w-[78vw] sm:max-w-[80%] ${reactions.length ? 'mb-3' : ''}`}>
+      <div ref={box} className={`relative flex w-full items-center gap-0.5 ${mine ? 'flex-row-reverse' : ''}`}>
+        {/* leaves room for the two buttons, so nothing spills out of the chat on a phone */}
+        <div className={`relative min-w-0 max-w-[calc(100%-4.75rem)] ${reactions.length ? 'mb-3' : ''}`}>
           <div
             className={`rounded-2xl px-3.5 py-2 text-sm break-words transition ${
               mine ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md bg-surface-2'
