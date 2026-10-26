@@ -303,3 +303,10 @@ class StoryRating(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["story", "reader_key"], name="one_rating_per_reader")]
+
+
+class StaffDevice(models.Model):
+    """A browser an admin has used (hashed id). Its views aren't counted, even when signed out."""
+
+    viewer_key = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)

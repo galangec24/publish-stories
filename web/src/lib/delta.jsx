@@ -54,7 +54,7 @@ function Run({ text, image, attrs }) {
   return node
 }
 
-function Line({ line }) {
+function Line({ line, anchor }) {
   const { header, blockquote, align } = line.block
   const style = align ? { textAlign: align } : undefined
   const content = line.runs.length ? line.runs.map((r, i) => <Run key={i} {...r} />) : <br />
@@ -65,9 +65,9 @@ function Line({ line }) {
       </figure>
     )
   }
-  if (header === 1) return <h1 style={style}>{content}</h1>
-  if (header === 2) return <h2 style={style}>{content}</h2>
-  if (header === 3) return <h3 style={style}>{content}</h3>
+  if (header === 1) return <h1 id={anchor} style={style}>{content}</h1>
+  if (header === 2) return <h2 id={anchor} style={style}>{content}</h2>
+  if (header === 3) return <h3 id={anchor} style={style}>{content}</h3>
   if (blockquote) return <blockquote style={style}>{content}</blockquote>
   return <p style={style}>{content}</p>
 }
@@ -76,6 +76,7 @@ function Line({ line }) {
 export function DeltaView({ ops, fontFamily, fontSize }) {
   const lines = splitLines(ops)
   const blocks = []
+  let section = 0
   for (let i = 0; i < lines.length; i++) {
     const list = lines[i].block.list
     if (list === 'bullet' || list === 'ordered') {
@@ -87,7 +88,8 @@ export function DeltaView({ ops, fontFamily, fontSize }) {
       i--
       blocks.push(list === 'bullet' ? <ul key={`l${i}`}>{items}</ul> : <ol key={`l${i}`}>{items}</ol>)
     } else if (lines[i].runs.length || lines[i].block.header) {
-      blocks.push(<Line key={i} line={lines[i]} />)
+      const isHeading = [1, 2, 3].includes(lines[i].block.header) && lines[i].runs.some((r) => r.text?.trim())
+      blocks.push(<Line key={i} line={lines[i]} anchor={isHeading ? `sec-${section++}` : undefined} />)
     }
   }
   return (
@@ -95,6 +97,20 @@ export function DeltaView({ ops, fontFamily, fontSize }) {
       {blocks}
     </div>
   )
+}
+
+/**
+ * Titles, subtitles and sections inside a chapter (Heading 1-3), in order, with the anchor id
+ * DeltaView gives each one: [{ id: "sec-0", level: 1, text: "Part One" }, ...].
+ */
+export function chapterHeadings(ops) {
+  const out = []
+  for (const line of splitLines(ops)) {
+    const level = line.block.header
+    const text = line.runs.map((r) => r.text || '').join('').trim()
+    if ([1, 2, 3].includes(level) && text && !line.block.list) out.push({ id: `sec-${out.length}`, level, text })
+  }
+  return out
 }
 
 export function wordCount(text) {

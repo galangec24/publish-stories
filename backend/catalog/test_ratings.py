@@ -134,3 +134,20 @@ class UnlockAllAndColumnLinksTests(APITestCase):
         self.assertEqual([c["title"] for c in home["columns"]], ["AND JUST LIKE THAT"])
         self.assertTrue(home["has_columns"])
         self.assertEqual([c["title"] for c in self.client.get("/api/columns/").data], ["AND JUST LIKE THAT"])
+
+
+class AdminViewsNotCountedTests(APITestCase):
+    def test_admin_browsers_never_count_even_signed_out(self):
+        story = Story.objects.create(title="Counted", status="published")
+        laptop = {"HTTP_X_VIEWER_ID": "admin-laptop-0001-aaaaaaa"}
+        url = f"/api/stories/{story.slug}/view/"
+        self.assertEqual(self.client.post(url, **laptop).data, {"view_count": 1, "reader_count": 1})  # before we knew
+
+        admin = User.objects.create_user(email="a@example.com", password="x", is_admin=True)
+        self.client.force_authenticate(admin)
+        self.client.get("/api/user/me/", **laptop)  # signing in on that browser
+        self.assertEqual(self.client.post(url, **laptop).data, {"view_count": 0, "reader_count": 0})  # old view removed
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.post(url, **laptop).data["view_count"], 0)  # signed out: still not counted
+        self.assertEqual(self.client.post(url, HTTP_X_VIEWER_ID="reader-phone-0002-bbbbbbb").data, {"view_count": 1, "reader_count": 1})
+        self.assertEqual(self.client.get("/api/stats/").data["total_readers"], 1)

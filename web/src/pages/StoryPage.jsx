@@ -11,7 +11,7 @@ import { LikeButton, StoryComments } from '../components/StoryCommunity'
 import { GenreTags, Spinner, useToast } from '../components/ui'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { DeltaView } from '../lib/delta'
+import { chapterHeadings, DeltaView } from '../lib/delta'
 import { fontStack, titleStack } from '../lib/fonts'
 import { formatCount, READING_MODES, useReadingMode } from '../lib/readingMode'
 import { useCachedAsync } from '../lib/useAsync'
@@ -58,6 +58,7 @@ export function StoryPage() {
   const posKey = `reading-pos:${slug}`
   const [readIds, setReadIds] = useState(() => new Set())
   const [resumed, setResumed] = useState(false)
+  const [jump, setJump] = useState(null) // section to show in book mode
   const resumeAt = useRef(null) // { chapterId, page, scroll } waiting to be applied
   const resumedFor = useRef(null)
 
@@ -184,6 +185,15 @@ export function StoryPage() {
   const views = counts?.view_count ?? s.view_count
   const readers = counts?.reader_count ?? s.reader_count
 
+  const sections = chapter?.content ? chapterHeadings(chapter.content) : []
+
+  // A section heading inside the current chapter: scroll to it, or turn to its page in book mode.
+  const showSection = (id) => {
+    setTocOpen(false)
+    if (mode === 'book') setJump({ id, at: Date.now() })
+    else document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   const go = (i, { atEnd = false } = {}) => {
     resumeAt.current = null
     setResumed(false)
@@ -294,8 +304,8 @@ export function StoryPage() {
               </p>
             )}
             {s.chapters.map((c, i) => (
+              <div key={c.id}>
               <button
-                key={c.id}
                 onClick={() => go(i)}
                 className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
                   i === index ? 'bg-brand/15 text-ink' : 'text-muted hover:bg-surface-2 hover:text-ink'
@@ -310,12 +320,56 @@ export function StoryPage() {
                   </span>
                 ) : null}
               </button>
+              {i === index &&
+                sections.map((h) => (
+                  <button
+                    key={h.id}
+                    type="button"
+                    onClick={() => showSection(h.id)}
+                    className="block w-full truncate py-1 pr-2 text-left text-xs text-muted hover:text-ink"
+                    style={{ paddingLeft: 20 + (h.level - 1) * 12 }}
+                  >
+                    {h.text}
+                  </button>
+                ))}
+              </div>
             ))}
           </nav>
         </div>
       </aside>
 
       <article className="min-w-0">
+        <label className="mb-3 flex items-center gap-2 text-sm">
+          <span className="shrink-0 text-muted">Jump to</span>
+          <select
+            className="input !py-2"
+            value={`c:${index}`}
+            onChange={(e) => {
+              const [kind, value] = e.target.value.split(':')
+              if (kind === 'c') go(Number(value))
+              else showSection(value)
+            }}
+          >
+            <optgroup label="Chapters">
+              {s.chapters.map((c, i) => (
+                <option key={c.id} value={`c:${i}`}>
+                  {c.content === null ? '🔒 ' : readIds.has(c.id) ? '✓ ' : ''}
+                  {c.title}
+                </option>
+              ))}
+            </optgroup>
+            {sections.length > 0 && (
+              <optgroup label={`In ${chapter?.title || 'this chapter'}`}>
+                {sections.map((h) => (
+                  <option key={h.id} value={`s:${h.id}`}>
+                    {'\u00a0\u00a0'.repeat(h.level - 1)}
+                    {h.text}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </label>
         <ProtectedContent>
           {mode === 'book' ? (
             <div className="rounded-3xl border border-line bg-page px-6 py-8 shadow-2xl shadow-black/20 sm:px-12 sm:py-10">
@@ -324,6 +378,7 @@ export function StoryPage() {
                 startAtEnd={fromEnd}
                 initialPage={resumeAt.current?.chapterId === chapter?.id ? resumeAt.current.page : null}
                 onPageChange={rememberPage}
+                jumpTo={jump}
                 hasPrev={index > 0}
                 hasNext={index < s.chapters.length - 1}
                 onPrevChapter={() => go(index - 1, { atEnd: true })}

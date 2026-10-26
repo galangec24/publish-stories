@@ -257,6 +257,11 @@ class MeView(generics.RetrieveUpdateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self):
+        if self.request.user.is_admin:
+            # Every browser an admin signs in on stops adding to views and readers.
+            from catalog.analytics import remember_staff_device
+
+            remember_staff_device(self.request)
         return self.request.user
 
 

@@ -13,7 +13,7 @@ const GAP = 64
  *
  * `startAtEnd` opens on the last page (used when going back a chapter).
  */
-export function BookReader({ children, onPrevChapter, onNextChapter, hasPrev, hasNext, startAtEnd, contentKey, initialPage = null, onPageChange }) {
+export function BookReader({ children, onPrevChapter, onNextChapter, hasPrev, hasNext, startAtEnd, contentKey, initialPage = null, onPageChange, jumpTo = null }) {
   const frame = useRef(null)
   const flow = useRef(null)
   const [page, setPage] = useState(0)
@@ -98,6 +98,13 @@ export function BookReader({ children, onPrevChapter, onNextChapter, hasPrev, ha
   }
 
   const shown = Math.max(page, 0)
+
+  // Go to the page holding an element (a section heading picked from the menu).
+  useEffect(() => {
+    if (!jumpTo?.id || !size.w) return
+    const el = flow.current?.querySelector(`#${CSS.escape(jumpTo.id)}`)
+    if (el) setPage(Math.max(0, Math.floor(el.offsetLeft / (size.w + GAP))))
+  }, [jumpTo, size.w]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (page >= 0) onPageChange?.(page)
