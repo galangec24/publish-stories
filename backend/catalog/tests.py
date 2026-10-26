@@ -355,3 +355,23 @@ class RecentlyDeletedChaptersTests(APITestCase):
         Chapter.all_objects.filter(pk=three.pk).update(deleted_at=timezone.now() - timedelta(days=31))
         self.assertEqual(self.client.get(f"/api/admin/stories/{story.id}/chapters/deleted/").data, [])
         self.assertFalse(Chapter.all_objects.filter(pk=three.pk).exists())
+
+
+
+class ChapterHeadingsTests(APITestCase):
+    def test_headings_are_kept_on_save_and_listed_for_every_chapter(self):
+        story = Story.objects.create(title="Sections")
+        ops = [
+            {"insert": "Part One"}, {"insert": "\n", "attributes": {"header": 1}},
+            {"insert": "Body text\nThe Storm"}, {"insert": "\n", "attributes": {"header": 2}},
+            {"insert": "  "}, {"insert": "\n", "attributes": {"header": 3}},  # empty heading: skipped
+        ]
+        chapter = Chapter.objects.create(story=story, title="One", order=0, content=ops)
+        Chapter.objects.create(story=story, title="Two", order=1, content=doc("plain"))
+        self.assertEqual(chapter.headings, [{"level": 1, "text": "Part One"}, {"level": 2, "text": "The Storm"}])
+        admin = User.objects.create_user(email="admin@example.com", password="x", is_admin=True)
+        self.client.force_authenticate(admin)
+        listed = self.client.get(f"/api/admin/stories/{story.id}/").data["chapters"]
+        self.assertEqual([c["headings"] for c in listed], [chapter.headings, []])
+        saved = self.client.patch(f"/api/admin/chapters/{chapter.id}/", {"content": [{"insert": "New"}, {"insert": "\n", "attributes": {"header": 2}}]}, format="json").data
+        self.assertEqual(saved["headings"], [{"level": 2, "text": "New"}])

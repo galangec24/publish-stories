@@ -83,7 +83,7 @@ class ChapterContentField(serializers.JSONField):
 class ChapterSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = Chapter
-        fields = ["id", "title", "order", "word_count", "revision", "updated_at"]
+        fields = ["id", "title", "order", "word_count", "headings", "revision", "updated_at"]
 
 
 class AdminChapterSerializer(serializers.ModelSerializer):
@@ -91,8 +91,8 @@ class AdminChapterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Chapter
-        fields = ["id", "story", "title", "order", "content", "word_count", "revision", "updated_at"]
-        read_only_fields = ["story", "word_count", "revision", "updated_at"]
+        fields = ["id", "story", "title", "order", "content", "word_count", "headings", "revision", "updated_at"]
+        read_only_fields = ["story", "word_count", "headings", "revision", "updated_at"]
 
     def validate_title(self, value):
         """Each chapter in a story needs its own name (ignoring case and extra spaces)."""

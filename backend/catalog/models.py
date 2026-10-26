@@ -193,6 +193,8 @@ class Chapter(models.Model):
     order = models.PositiveIntegerField(default=0)
     content = models.JSONField(default=delta.empty_document, help_text="Quill Delta ops")
     word_count = models.PositiveIntegerField(default=0)
+    # Section headings in this chapter, kept up to date on save (for navigation lists).
+    headings = models.JSONField(default=list, blank=True)
     # Bumped on every save; the editor sends the revision it loaded so concurrent
     # edits from two admins are rejected instead of silently overwritten.
     revision = models.PositiveIntegerField(default=1)
@@ -210,6 +212,9 @@ class Chapter(models.Model):
     def save(self, *args, **kwargs):
         self.content = delta.normalize(self.content)
         self.word_count = delta.word_count(self.content)
+        self.headings = delta.headings(self.content)
+        if kwargs.get("update_fields") is not None and "content" in kwargs["update_fields"]:
+            kwargs["update_fields"] = {*kwargs["update_fields"], "word_count", "headings"}
         super().save(*args, **kwargs)
 
     def __str__(self):

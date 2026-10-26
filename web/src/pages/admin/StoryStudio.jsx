@@ -92,6 +92,7 @@ export function StoryStudio() {
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [headings, setHeadings] = useState([])
+  const pendingHeading = useRef(null) // heading index to show once another chapter has opened
   const [words, setWords] = useState(0)
   const [conflict, setConflict] = useState(null)
   const [imageSel, setImageSel] = useState(null) // { index, el } of the clicked image
@@ -225,6 +226,14 @@ export function StoryStudio() {
   }
 
   const flush = async () => (dirtyRef.current ? save() : true)
+
+  // A heading picked in another chapter: once that chapter is loaded, go to it.
+  useEffect(() => {
+    const j = pendingHeading.current
+    if (j === null || !headings[j]) return
+    pendingHeading.current = null
+    jumpTo(headings[j].offset)
+  }, [headings]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function openChapter(chId, force = false) {
     if (!force && chId === chapterRef.current.id) return
@@ -780,17 +789,20 @@ export function StoryStudio() {
                     <button className="hidden px-1 text-muted group-hover:block hover:text-ink" title="Rename" onClick={(e) => { e.stopPropagation(); renameChapter(c) }}><Pencil className="h-3.5 w-3.5" /></button>
                     <button className="hidden px-1 text-muted group-hover:block hover:text-red-400" title="Delete" onClick={(e) => { e.stopPropagation(); deleteChapter(c) }}><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
-                  {c.id === chapterId &&
-                    headings.map((h, j) => (
-                      <button
-                        key={j}
-                        onClick={() => jumpTo(h.offset)}
-                        className="block w-full truncate py-0.5 pr-2 text-left text-xs text-muted hover:text-ink"
-                        style={{ paddingLeft: 28 + (h.level - 1) * 12 }}
-                      >
-                        {h.text}
-                      </button>
-                    ))}
+                  {(c.id === chapterId ? headings : c.headings || []).map((h, j) => (
+                    <button
+                      key={j}
+                      onClick={() => {
+                        if (c.id === chapterId) return jumpTo(h.offset)
+                        pendingHeading.current = j // open that chapter, then go to this heading
+                        openChapter(c.id)
+                      }}
+                      className={`block w-full truncate py-0.5 pr-2 text-left text-xs hover:text-ink ${c.id === chapterId ? 'text-muted' : 'text-muted/70'}`}
+                      style={{ paddingLeft: 28 + (h.level - 1) * 12 }}
+                    >
+                      {h.text}
+                    </button>
+                  ))}
                 </div>
               ))}
             </div>
@@ -935,7 +947,7 @@ export function StoryStudio() {
   )
 }
 
-const pick = (d) => ({ title: d.title, word_count: d.word_count, revision: d.revision })
+const pick = (d) => ({ title: d.title, word_count: d.word_count, revision: d.revision, headings: d.headings })
 
 function extractHeadings(ops) {
   const result = []

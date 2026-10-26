@@ -60,6 +60,25 @@ def plain_text(ops):
     return "".join(op["insert"] if isinstance(op.get("insert"), str) else " " for op in ops or [])
 
 
+def headings(ops):
+    """Titles, subtitles and sections (Heading 1-3) in order: [{"level": 1, "text": "Part One"}, ...]."""
+    out, line = [], []
+    for op in ops or []:
+        insert = op.get("insert")
+        if not isinstance(insert, str):
+            continue
+        parts = insert.split("\n")
+        for i, part in enumerate(parts):
+            line.append(part)
+            if i < len(parts) - 1:
+                level = (op.get("attributes") or {}).get("header")
+                text = "".join(line).strip()
+                if level in (1, 2, 3) and text:
+                    out.append({"level": level, "text": text[:200]})
+                line = []
+    return out
+
+
 def word_count(ops):
     return len(plain_text(ops).split())
 

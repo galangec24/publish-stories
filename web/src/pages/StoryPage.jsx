@@ -59,6 +59,7 @@ export function StoryPage() {
   const [readIds, setReadIds] = useState(() => new Set())
   const [resumed, setResumed] = useState(false)
   const [jump, setJump] = useState(null) // section to show in book mode
+  const pendingSection = useRef(null) // section in another chapter, shown once that chapter is open
   const resumeAt = useRef(null) // { chapterId, page, scroll } waiting to be applied
   const resumedFor = useRef(null)
 
@@ -127,6 +128,17 @@ export function StoryPage() {
     }
   }, [mode, openChapterId, posKey])
 
+  useEffect(() => {
+    const id = pendingSection.current
+    if (!id) return
+    pendingSection.current = null
+    const t = setTimeout(() => {
+      if (mode === 'book') setJump({ id, at: Date.now() })
+      else document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 250)
+    return () => clearTimeout(t)
+  }, [openChapterId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function rememberPage(page) {
     if (!openChapterId) return
     try {
@@ -186,12 +198,19 @@ export function StoryPage() {
   const readers = counts?.reader_count ?? s.reader_count
 
   const sections = chapter?.content ? chapterHeadings(chapter.content) : []
+  const sectionsOf = (c) => (c.content ? chapterHeadings(c.content) : [])
 
   // A section heading inside the current chapter: scroll to it, or turn to its page in book mode.
   const showSection = (id) => {
     setTocOpen(false)
     if (mode === 'book') setJump({ id, at: Date.now() })
     else document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const openSection = (i, id) => {
+    if (i === index) return showSection(id)
+    pendingSection.current = id
+    go(i)
   }
 
   const go = (i, { atEnd = false } = {}) => {
@@ -320,12 +339,11 @@ export function StoryPage() {
                   </span>
                 ) : null}
               </button>
-              {i === index &&
-                sections.map((h) => (
+              {(i === index ? sections : sectionsOf(c)).map((h) => (
                   <button
                     key={h.id}
                     type="button"
-                    onClick={() => showSection(h.id)}
+                    onClick={() => openSection(i, h.id)}
                     className="block w-full truncate py-1 pr-2 text-left text-xs text-muted hover:text-ink"
                     style={{ paddingLeft: 20 + (h.level - 1) * 12 }}
                   >
@@ -345,29 +363,23 @@ export function StoryPage() {
             className="input !py-2"
             value={`c:${index}`}
             onChange={(e) => {
-              const [kind, value] = e.target.value.split(':')
-              if (kind === 'c') go(Number(value))
-              else showSection(value)
+              const [kind, at, id] = e.target.value.split(':')
+              if (kind === 'c') go(Number(at))
+              else openSection(Number(at), id)
             }}
           >
-            <optgroup label="Chapters">
-              {s.chapters.map((c, i) => (
-                <option key={c.id} value={`c:${i}`}>
-                  {c.content === null ? '🔒 ' : readIds.has(c.id) ? '✓ ' : ''}
-                  {c.title}
+            {s.chapters.map((c, i) => [
+              <option key={c.id} value={`c:${i}`}>
+                {c.content === null ? '🔒 ' : readIds.has(c.id) ? '✓ ' : ''}
+                {c.title}
+              </option>,
+              ...sectionsOf(c).map((h) => (
+                <option key={`${c.id}-${h.id}`} value={`s:${i}:${h.id}`}>
+                  {'\u00a0\u00a0\u00a0'.repeat(h.level)}
+                  {h.text}
                 </option>
-              ))}
-            </optgroup>
-            {sections.length > 0 && (
-              <optgroup label={`In ${chapter?.title || 'this chapter'}`}>
-                {sections.map((h) => (
-                  <option key={h.id} value={`s:${h.id}`}>
-                    {'\u00a0\u00a0'.repeat(h.level - 1)}
-                    {h.text}
-                  </option>
-                ))}
-              </optgroup>
-            )}
+              )),
+            ])}
           </select>
         </label>
         <ProtectedContent>
