@@ -168,6 +168,7 @@ export function Home() {
         <ColumnsTab columns={columns.data} loading={columns.loading} />
       ) : (
         <>
+          <ColumnsSection columns={data.columns} onSeeAll={() => setParams({ tab: 'columns' }, { replace: false })} />
           {user && (
             <Shelf
               title="For you"
@@ -207,43 +208,78 @@ function Results({ stories, loading }) {
   )
 }
 
+/** "SunStar" for sunstar.com.ph, otherwise the site's name. */
+function siteName(url) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '')
+    if (host.includes('sunstar')) return 'SunStar'
+    return host
+  } catch {
+    return 'the site'
+  }
+}
+
+/** A newspaper column: an article-style card that opens the column on its site (SunStar). */
+function ColumnCard({ column }) {
+  if (!column.url) return null
+  return (
+    <a
+      href={column.url}
+      target="_blank"
+      rel="noreferrer noopener"
+      className="group card flex min-w-0 flex-col gap-3 p-5 transition hover:-translate-y-1 hover:border-brand/50 hover:shadow-2xl"
+    >
+      <span className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.2em] text-accent uppercase">
+        <Newspaper className="h-4 w-4" /> Column · {siteName(column.url)}
+      </span>
+      <h3 className="font-display text-xl leading-snug group-hover:text-brand">{column.title}</h3>
+      {column.description && <p className="line-clamp-3 text-sm text-muted">{column.description}</p>}
+      <span className="mt-auto inline-flex items-center gap-1 text-sm font-semibold text-brand">
+        Read on {siteName(column.url)} <ArrowUpRight className="h-4 w-4 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+      </span>
+    </a>
+  )
+}
+
+/** The author's columns, as their own section on the home page (separate from the stories). */
+function ColumnsSection({ columns, onSeeAll }) {
+  if (!columns?.length) return null
+  return (
+    <section className="mt-12">
+      <div className="mb-4 flex items-end justify-between gap-3 px-1">
+        <div>
+          <h2 className="font-display text-2xl">Her columns</h2>
+          <p className="text-sm text-muted">Opinion and reflections, published in the newspaper</p>
+        </div>
+        <button type="button" onClick={onSeeAll} className="btn-ghost !py-1.5 text-sm">
+          All columns
+        </button>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {columns.slice(0, 3).map((c) => (
+          <ColumnCard key={c.id} column={c} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function ColumnsTab({ columns, loading }) {
   if (!columns) return loading ? <Spinner /> : null
-  if (!columns.length) return <p className="py-16 text-center text-muted">No columns published yet.</p>
+  const linked = columns.filter((c) => c.url)
+  const withPieces = columns.filter((c) => c.stories?.length)
+  if (!linked.length && !withPieces.length) return <p className="py-16 text-center text-muted">No columns yet.</p>
   return (
-    <div className="mt-6 space-y-6">
-      {columns.map((c) => (
-        <section key={c.id} className="card p-5 sm:p-6">
-          <div className="flex flex-wrap items-start gap-3">
-            <span className="tile-3d grid h-11 w-11 shrink-0 place-items-center rounded-2xl">
-              <Newspaper className="h-5 w-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <h2 className="font-display text-2xl leading-tight">{c.title}</h2>
-              <p className="text-xs tracking-wide text-muted uppercase">
-                {c.story_count} piece{c.story_count === 1 ? '' : 's'}
-                {c.is_public && <span className="ml-2 text-emerald-400">Free to read</span>}
-              </p>
-              {c.description && <p className="mt-2 max-w-2xl text-sm text-muted">{c.description}</p>}
-            </div>
-            {c.url && (
-              <a href={c.url} target="_blank" rel="noreferrer noopener" className="btn-ghost !py-1.5 text-sm">
-                Visit column <ArrowUpRight className="h-4 w-4" />
-              </a>
-            )}
-          </div>
-          {c.stories.length ? (
-            <div className="-mx-2 mt-4 flex gap-6 overflow-x-auto px-4 pt-4 pb-6 [scrollbar-width:thin]">
-              {c.stories.map((s) => (
-                <Book3D key={s.id} story={s} />
-              ))}
-            </div>
-          ) : (
-            <p className="mt-4 rounded-xl border border-dashed border-line p-4 text-sm text-muted">
-              No pieces published here yet.{c.url ? ' Read the column on its site in the meantime.' : ' Check back soon.'}
-            </p>
-          )}
-        </section>
+    <div className="mt-6 space-y-8">
+      {linked.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {linked.map((c) => (
+            <ColumnCard key={c.id} column={c} />
+          ))}
+        </div>
+      )}
+      {withPieces.map((c) => (
+        <Shelf key={c.id} title={c.title} subtitle="Stories in this column" stories={c.stories} />
       ))}
     </div>
   )

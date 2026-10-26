@@ -50,6 +50,7 @@ class StoryListSerializer(serializers.ModelSerializer):
             "price",
             "is_free",
             "free_chapters",
+            "all_chapters_free",
             "font_family",
             "font_size",
             "title_font",

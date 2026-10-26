@@ -72,6 +72,9 @@ class Story(models.Model):
     free_chapters = models.PositiveSmallIntegerField(
         default=1, help_text="Chapters anyone can read before paying (0 locks the whole story)"
     )
+    # A switch on top of free_chapters: while on, every chapter is free; turning it off brings
+    # back the locks exactly as they were (free_chapters is never changed by it).
+    all_chapters_free = models.BooleanField(default=False)
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="PHP; 0 means free")
     # Reading typography chosen by the author; readers see the story in this font and size.
     font_family = models.CharField(
@@ -150,7 +153,7 @@ class Story(models.Model):
 
     @property
     def is_free(self):
-        return self.price <= 0 or bool(self.column and self.column.is_public)
+        return self.price <= 0 or self.all_chapters_free or bool(self.column and self.column.is_public)
 
     def refresh_word_count(self):
         self.word_count = sum(self.chapters.values_list("word_count", flat=True))

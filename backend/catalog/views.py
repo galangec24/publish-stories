@@ -42,7 +42,7 @@ def filter_stories(queryset, params):
         q = params["q"].strip()
         queryset = queryset.filter(Q(title__icontains=q) | Q(synopsis__icontains=q) | Q(author_name__icontains=q))
     if params.get("free") in {"1", "true"}:
-        queryset = queryset.filter(Q(price__lte=0) | Q(column__is_public=True))
+        queryset = queryset.filter(Q(price__lte=0) | Q(column__is_public=True) | Q(all_chapters_free=True))
     ordering = params.get("ordering")
     if ordering in {"popular", "readers"}:
         queryset = queryset.order_by("-view_count" if ordering == "popular" else "-reader_count")
@@ -61,7 +61,7 @@ class GenreListView(generics.ListAPIView):
 
 
 class ColumnListView(APIView):
-    """GET /api/columns/ — the Columns tab: public columns, and any column with published pieces (most liked first)."""
+    """GET /api/columns/ — the Columns tab: columns with a link (to SunStar), public ones, and any with pieces. Newest first."""
 
     permission_classes = [permissions.AllowAny]
 
@@ -69,7 +69,7 @@ class ColumnListView(APIView):
         stories = published_stories().order_by("-like_count", "-rating_avg", "-rating_count", "-published_at")
         columns = Column.objects.annotate(
             story_count=Count("stories", filter=Q(stories__status=Story.Status.PUBLISHED))
-        ).filter(Q(story_count__gt=0) | Q(is_public=True)).order_by("title")
+        ).filter(Q(story_count__gt=0) | Q(is_public=True) | ~Q(url="")).order_by("-created_at")
         return Response(
             [
                 {
@@ -185,10 +185,12 @@ class HomeView(APIView):
         return Response(
             {
                 "genres": GenreSerializer(genres, many=True).data,
-                "has_columns": Column.objects.filter(Q(is_public=True) | Q(stories__status=Story.Status.PUBLISHED)).exists(),
+                "has_columns": Column.objects.filter(Q(is_public=True) | ~Q(url="") | Q(stories__status=Story.Status.PUBLISHED)).exists(),
+                # The author's columns (links to SunStar) shown on the home page, apart from the stories.
+                "columns": ColumnSerializer(Column.objects.exclude(url="").order_by("-created_at")[:6], many=True).data,
                 "for_you": for_you,
                 "latest": shelf(stories),
-                "free": shelf(best(stories.filter(Q(price__lte=0) | Q(column__is_public=True)))),
+                "free": shelf(best(stories.filter(Q(price__lte=0) | Q(column__is_public=True) | Q(all_chapters_free=True)))),
                 "by_genre": by_genre,
                 "popular": shelf(stories.filter(view_count__gt=0).order_by("-view_count", "-like_count", "-rating_avg")),
                 "stats": platform_stats(),

@@ -366,6 +366,18 @@ export function StoryStudio() {
 
   // Free chapters run in order from Chapter 1: freeing chapter i frees everything before it,
   // locking chapter i locks everything after it.
+  // "Unlock all chapters": a switch on top of the chapter locks. Turning it off brings back
+  // the locks exactly as they were (free_chapters is left alone).
+  async function toggleAllFree() {
+    const on = !story.all_chapters_free
+    try {
+      setStory(await api.patch(`admin/stories/${id}/`, { all_chapters_free: on }))
+      toast(on ? 'All chapters are free for now. Turn it off to bring back the locks.' : 'Chapter locks are back as they were.')
+    } catch (e) {
+      toast(e, 'error')
+    }
+  }
+
   async function toggleChapterLock(index) {
     const free = story.free_chapters
     const next = index < free ? index : index + 1
@@ -681,6 +693,25 @@ export function StoryStudio() {
                 <Plus className="h-5 w-5" />
               </button>
             </div>
+            {sellsChapters && (
+              <label className="mx-2 mb-2 flex cursor-pointer items-center gap-2 rounded-lg border border-line px-2.5 py-2 text-xs">
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold">Unlock all chapters</span>
+                  <span className="block text-muted">
+                    {story.all_chapters_free ? 'Everything is free now. Off = back to your locks.' : 'Make the whole story free for a while.'}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(story.all_chapters_free)}
+                  onClick={toggleAllFree}
+                  className={`relative h-5 w-9 shrink-0 rounded-full transition ${story.all_chapters_free ? 'bg-emerald-500' : 'bg-line'}`}
+                >
+                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${story.all_chapters_free ? 'left-4.5' : 'left-0.5'}`} />
+                </button>
+              </label>
+            )}
             <div className="flex-1 overflow-y-auto px-2 pb-4">
               {chapters.map((c, i) => (
                 <div
@@ -699,7 +730,12 @@ export function StoryStudio() {
                     <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted" aria-label="Drag to reorder" />
                     <span className="min-w-0 flex-1 truncate">{c.title || 'Untitled'}</span>
                     <span className="text-[10px] text-muted">{c.word_count}</span>
-                    {sellsChapters && (
+                    {sellsChapters && story.all_chapters_free && (
+                      <span className="px-1 py-0.5 text-emerald-400/60" title="Free while “Unlock all chapters” is on">
+                        <LockOpen className="h-3.5 w-3.5" />
+                      </span>
+                    )}
+                    {sellsChapters && !story.all_chapters_free && (
                       <button
                         className={`rounded px-1 py-0.5 ${i < story.free_chapters ? 'text-emerald-400 hover:bg-emerald-500/10' : 'text-amber-400 hover:bg-amber-500/10'}`}
                         title={

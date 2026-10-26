@@ -102,3 +102,35 @@ class OrderingAndProgressTests(APITestCase):
         made = self.client.post("/api/admin/stories/", {"title": "Fonts", "font_family": "eb_garamond", "title_font": "great_vibes"}, format="json")
         self.assertEqual((made.data["font_family"], made.data["title_font"]), ("eb_garamond", "great_vibes"))
         self.assertEqual(self.client.post("/api/admin/stories/", {"title": "Bad", "font_family": "comic_sans"}, format="json").status_code, 400)
+
+
+class UnlockAllAndColumnLinksTests(APITestCase):
+    def test_unlock_all_then_back_to_the_saved_locks(self):
+        story = Story.objects.create(title="Toggle", price=49, free_chapters=1, status="published")
+        for i in range(3):
+            Chapter.objects.create(story=story, title=f"C{i}", order=i, content=[{"insert": "x\n"}], word_count=1)
+        url = f"/api/stories/{story.slug}/"
+        self.assertEqual([c["locked"] for c in self.client.get(url).data["chapters"]], [False, True, True])
+
+        admin = User.objects.create_user(email="a@example.com", password="x", is_admin=True)
+        self.client.force_authenticate(admin)
+        self.client.patch(f"/api/admin/stories/{story.id}/", {"all_chapters_free": True}, format="json")
+        self.client.force_authenticate(None)
+        data = self.client.get(url).data
+        self.assertEqual(([c["locked"] for c in data["chapters"]], data["locked"], data["is_free"]), ([False, False, False], False, True))
+
+        self.client.force_authenticate(admin)
+        back = self.client.patch(f"/api/admin/stories/{story.id}/", {"all_chapters_free": False}, format="json").data
+        self.assertEqual(back["free_chapters"], 1)  # never touched by the switch
+        self.client.force_authenticate(None)
+        self.assertEqual([c["locked"] for c in self.client.get(url).data["chapters"]], [False, True, True])
+
+    def test_columns_with_a_link_show_on_home_and_in_the_tab(self):
+        from .models import Column
+
+        Column.objects.create(title="AND JUST LIKE THAT", description="Reflections", url="https://www.sunstar.com.ph/x")
+        Column.objects.create(title="No link yet")
+        home = self.client.get("/api/home/").data
+        self.assertEqual([c["title"] for c in home["columns"]], ["AND JUST LIKE THAT"])
+        self.assertTrue(home["has_columns"])
+        self.assertEqual([c["title"] for c in self.client.get("/api/columns/").data], ["AND JUST LIKE THAT"])

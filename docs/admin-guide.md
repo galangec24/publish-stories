@@ -23,6 +23,7 @@ This guide covers everyday tasks on **Publish Stories**. Sign in at https://publ
   - Green 🔓 means free, amber 🔒 means paid.
   - Clicking a lock frees that chapter and every chapter before it, or locks it and every chapter after it.
   - Free chapters always start from Chapter 1.
+- **Unlock all chapters** (top of the chapter list) makes the whole story free for a while, for example as a promotion. Turn it off and the chapter locks come back exactly as you left them.
 - **The ribbon** has bold, headings, lists, alignment, font and size, pictures, find, word count and a page split. Your work saves automatically every few seconds.
 - **Story settings** cover title, synopsis, cover picture, genres, column, price, free chapters and reading fonts.
 - **Publish** asks for the price one last time. You can change the price until the first reader pays; after that it is locked.
@@ -68,7 +69,8 @@ Use the **search box** to find a payment by reference number, name, email, story
 ## The website itself
 
 - **About me:** edit your photo, introduction, roles, links and the "From the Author's Desk" text.
-- **Genres** and **Columns:** add, rename or remove. Removing a genre doesn't delete its stories.
+- **Genres:** add, rename or remove. Removing a genre doesn't delete its stories.
+- **Columns:** each column is a link to your column on SunStar. Give it a title, a short description and the SunStar link. It appears as a card in **Her columns** on the home page and in the **Columns** tab, separate from your stories, and opens SunStar in a new tab.
 - **Activity log:** every change made in the admin area, with who, what and when.
 
 ## Readers' side, in short
