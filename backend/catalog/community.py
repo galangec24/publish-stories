@@ -17,6 +17,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdmin
+from accounts.profanity import clean
 from notifications.service import first_name, notify, notify_admins
 
 from .models import Comment, Story, StoryLike
@@ -81,6 +82,9 @@ class LikeView(APIView):
 class CommentInput(serializers.Serializer):
     body = serializers.CharField(max_length=1000, trim_whitespace=True)
     parent = serializers.IntegerField(required=False, allow_null=True)
+
+    def validate_body(self, value):
+        return clean(value)
 
 
 class CommentListView(APIView):

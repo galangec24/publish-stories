@@ -168,7 +168,6 @@ export function Home() {
         <ColumnsTab columns={columns.data} loading={columns.loading} />
       ) : (
         <>
-          <ColumnsSection columns={data.columns} onSeeAll={() => setParams({ tab: 'columns' }, { replace: false })} />
           {user && (
             <Shelf
               title="For you"
@@ -238,29 +237,6 @@ function ColumnCard({ column }) {
         Read on {siteName(column.url)} <ArrowUpRight className="h-4 w-4 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
       </span>
     </a>
-  )
-}
-
-/** The author's columns, as their own section on the home page (separate from the stories). */
-function ColumnsSection({ columns, onSeeAll }) {
-  if (!columns?.length) return null
-  return (
-    <section className="mt-12">
-      <div className="mb-4 flex items-end justify-between gap-3 px-1">
-        <div>
-          <h2 className="font-display text-2xl">Her columns</h2>
-          <p className="text-sm text-muted">Opinion and reflections, published in the newspaper</p>
-        </div>
-        <button type="button" onClick={onSeeAll} className="btn-ghost !py-1.5 text-sm">
-          All columns
-        </button>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {columns.slice(0, 3).map((c) => (
-          <ColumnCard key={c.id} column={c} />
-        ))}
-      </div>
-    </section>
   )
 }
 

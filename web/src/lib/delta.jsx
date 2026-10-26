@@ -68,8 +68,22 @@ function Line({ line, anchor }) {
   if (header === 1) return <h1 id={anchor} style={style}>{content}</h1>
   if (header === 2) return <h2 id={anchor} style={style}>{content}</h2>
   if (header === 3) return <h3 id={anchor} style={style}>{content}</h3>
-  if (blockquote) return <blockquote style={style}>{content}</blockquote>
-  return <p style={style}>{content}</p>
+  if (blockquote) return <blockquote id={anchor} style={style}>{content}</blockquote>
+  return <p id={anchor} style={style}>{content}</p>
+}
+
+/**
+ * Is this line a title or section? Heading 1-3, or a short line that is entirely bold
+ * (authors often bold a title instead of using a heading style). Returns its level, or 0.
+ */
+function sectionLevel(line) {
+  if (line.block.list || !line.runs.length || line.runs.some((r) => r.image)) return 0
+  const text = line.runs.map((r) => r.text || '').join('').trim()
+  if (!text) return 0
+  if ([1, 2, 3].includes(line.block.header)) return line.block.header
+  const written = line.runs.filter((r) => r.text?.trim())
+  const bold = written.length > 0 && written.every((r) => r.attrs.bold)
+  return bold && text.split(/\s+/).length <= 15 ? 2 : 0
 }
 
 /** `fontFamily` / `fontSize` set the story's default reading typography. */
@@ -88,8 +102,7 @@ export function DeltaView({ ops, fontFamily, fontSize }) {
       i--
       blocks.push(list === 'bullet' ? <ul key={`l${i}`}>{items}</ul> : <ol key={`l${i}`}>{items}</ol>)
     } else if (lines[i].runs.length || lines[i].block.header) {
-      const isHeading = [1, 2, 3].includes(lines[i].block.header) && lines[i].runs.some((r) => r.text?.trim())
-      blocks.push(<Line key={i} line={lines[i]} anchor={isHeading ? `sec-${section++}` : undefined} />)
+      blocks.push(<Line key={i} line={lines[i]} anchor={sectionLevel(lines[i]) ? `sec-${section++}` : undefined} />)
     }
   }
   return (
@@ -106,9 +119,8 @@ export function DeltaView({ ops, fontFamily, fontSize }) {
 export function chapterHeadings(ops) {
   const out = []
   for (const line of splitLines(ops)) {
-    const level = line.block.header
-    const text = line.runs.map((r) => r.text || '').join('').trim()
-    if ([1, 2, 3].includes(level) && text && !line.block.list) out.push({ id: `sec-${out.length}`, level, text })
+    const level = sectionLevel(line)
+    if (level) out.push({ id: `sec-${out.length}`, level, text: line.runs.map((r) => r.text || '').join('').trim() })
   }
   return out
 }

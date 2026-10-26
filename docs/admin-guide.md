@@ -24,6 +24,7 @@ This guide covers everyday tasks on **Publish Stories**. Sign in at https://publ
   - Clicking a lock frees that chapter and every chapter before it, or locks it and every chapter after it.
   - Free chapters always start from Chapter 1.
 - **Unlock all chapters** (top of the chapter list) makes the whole story free for a while, for example as a promotion. Turn it off and the chapter locks come back exactly as you left them.
+- **Sections in a chapter:** lines styled as Heading 1/2/3, or short lines that are entirely **bold**, appear as sections in the navigation (Studio and reader) and in the reader's **Jump to** menu.
 - **The ribbon** has bold, headings, lists, alignment, font and size, pictures, find, word count and a page split. Your work saves automatically every few seconds.
 - **Story settings** cover title, synopsis, cover picture, genres, column, price, free chapters and reading fonts.
 - **Publish** asks for the price one last time. You can change the price until the first reader pays; after that it is locked.
@@ -60,10 +61,11 @@ Use the **search box** to find a payment by reference number, name, email, story
 ## Readers
 
 - **Readers & payments:** who read a paid story without paying, and open checkouts.
-- **Comments:** hide or delete comments. Your own comments show an **Admin** badge.
+- **Comments:** hide or delete comments. Your own comments show an **Admin** badge. Comments, chat messages and names with foul words (English, Tagalog, Bisaya, including disguised spellings like `f*ck` or `p u t a`) are refused automatically; readers see "Please keep it kind" while typing.
 - **Support inbox:** reply to readers. You can send emoji, GIFs, pictures and files.
   - Readers without an account can write too. They show as **Guest**, with the name and email they left (if any).
-  - If a guest left an email, they also get your reply by email. Otherwise they see it the next time they open the chat on the same phone or computer.
+  - If a guest left an email, they also get your reply by email.
+  - A conversation with no new message for 30 days is archived: its messages and files are deleted, and the reader's chat says the earlier messages were archived and starts a new conversation. Otherwise they see it the next time they open the chat on the same phone or computer.
 - **Email requests:** approve or deny readers who want to change their email.
 
 ## The website itself

@@ -232,3 +232,38 @@ class NotificationsClearWhenReadTests(APITestCase):
         self.assertEqual(reader.notifications.filter(is_read=False).count(), 1)
         self.client.get("/api/support/")  # reader opens the chat
         self.assertEqual(reader.notifications.filter(is_read=False).count(), 0)
+
+
+class InactiveArchiveTests(APITestCase):
+    def test_thirty_quiet_days_archive_the_messages_and_start_fresh(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        cache.clear()
+        admin = User.objects.create_user(email="admin@example.com", password="x", is_admin=True)
+        reader = User.objects.create_user(email="r@example.com", password="x")
+        self.client.force_authenticate(reader)
+        self.client.post("/api/support/messages/", {"body": "Old question"}, format="json")
+        conversation = Conversation.objects.get()
+        Conversation.objects.filter(pk=conversation.pk).update(last_message_at=timezone.now() - timedelta(days=31))
+
+        opened = self.client.get("/api/support/").data
+        self.assertEqual(opened["messages"], [])
+        self.assertIsNotNone(opened["archived_at"])
+        self.assertFalse(Message.objects.exists())
+        self.client.post("/api/support/messages/", {"body": "New question"}, format="json")
+        self.assertEqual([m["body"] for m in self.client.get("/api/support/").data["messages"]], ["New question"])
+
+        # Threads the reader never reopens are cleared when the admin inbox loads.
+        Conversation.objects.filter(pk=conversation.pk).update(last_message_at=timezone.now() - timedelta(days=40))
+        self.client.force_authenticate(admin)
+        self.assertEqual(self.client.get("/api/admin/support/").data["results"], [])
+        self.assertFalse(Message.objects.exists())
+
+    def test_recent_threads_are_kept(self):
+        cache.clear()
+        reader = User.objects.create_user(email="r@example.com", password="x")
+        self.client.force_authenticate(reader)
+        self.client.post("/api/support/messages/", {"body": "Still here"}, format="json")
+        self.assertEqual(len(self.client.get("/api/support/").data["messages"]), 1)

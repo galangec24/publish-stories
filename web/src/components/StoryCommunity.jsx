@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom'
 
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { KIND_MESSAGE, findBadWord } from '../lib/profanity'
 import { formatCount } from '../lib/readingMode'
 import { timeAgo } from '../lib/time'
 import { Avatar } from './HeaderMenus'
@@ -62,10 +63,11 @@ function CommentBox({ onSubmit, placeholder = 'Share your thoughts…', autoFocu
   const { user } = useAuth()
   const [body, setBody] = useState('')
   const [busy, setBusy] = useState(false)
+  const badWord = findBadWord(body)
 
   async function submit(e) {
     e.preventDefault()
-    if (!body.trim()) return
+    if (!body.trim() || badWord) return
     setBusy(true)
     try {
       await onSubmit(body.trim())
@@ -89,11 +91,13 @@ function CommentBox({ onSubmit, placeholder = 'Share your thoughts…', autoFocu
           onKeyDown={(e) => (e.ctrlKey || e.metaKey) && e.key === 'Enter' && submit(e)}
         />
         <div className="mt-2 flex items-center justify-end gap-2">
-          <span className="mr-auto text-[11px] text-muted">{body.length}/1000</span>
+          <span className={`mr-auto text-[11px] ${badWord ? 'font-semibold text-rose-400' : 'text-muted'}`}>
+            {badWord ? KIND_MESSAGE : `${body.length}/1000`}
+          </span>
           {onCancel && (
             <button type="button" className="btn-ghost !py-1.5" onClick={onCancel}>Cancel</button>
           )}
-          <button className="btn-primary !py-1.5" disabled={busy || !body.trim()}>
+          <button className="btn-primary !py-1.5" disabled={busy || !body.trim() || Boolean(badWord)}>
             <Send className="h-4 w-4" /> {busy ? 'Posting…' : 'Post'}
           </button>
         </div>

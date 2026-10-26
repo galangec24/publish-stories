@@ -949,24 +949,34 @@ export function StoryStudio() {
 
 const pick = (d) => ({ title: d.title, word_count: d.word_count, revision: d.revision, headings: d.headings })
 
+// Headings for the navigation pane: Heading 1-3 lines, and short lines that are entirely bold
+// (authors often bold a title instead of using a heading style). Same rule as the server.
 function extractHeadings(ops) {
   const result = []
   let offset = 0
   let lineStart = 0
   let line = ''
+  let allBold = true
+  let hasPicture = false
   for (const op of ops || []) {
     if (typeof op.insert !== 'string') {
       offset += 1
+      hasPicture = true
       continue
     }
     for (const ch of op.insert) {
       if (ch === '\n') {
+        const text = line.trim()
         const level = op.attributes?.header
-        if (level && line.trim()) result.push({ text: line.trim(), level, offset: lineStart })
+        const boldTitle = allBold && !op.attributes?.list && text.split(/\s+/).length <= 15
+        if (text && !hasPicture && (level || boldTitle)) result.push({ text, level: level || 2, offset: lineStart })
         line = ''
+        allBold = true
+        hasPicture = false
         lineStart = offset + 1
       } else {
         line += ch
+        if (ch.trim() && !op.attributes?.bold) allBold = false
       }
       offset += 1
     }

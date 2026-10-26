@@ -131,7 +131,7 @@ class UnlockAllAndColumnLinksTests(APITestCase):
         Column.objects.create(title="AND JUST LIKE THAT", description="Reflections", url="https://www.sunstar.com.ph/x")
         Column.objects.create(title="No link yet")
         home = self.client.get("/api/home/").data
-        self.assertEqual([c["title"] for c in home["columns"]], ["AND JUST LIKE THAT"])
+        self.assertNotIn("columns", home)  # columns live in their own tab, not on the Stories tab
         self.assertTrue(home["has_columns"])
         self.assertEqual([c["title"] for c in self.client.get("/api/columns/").data], ["AND JUST LIKE THAT"])
 

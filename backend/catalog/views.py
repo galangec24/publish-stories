@@ -186,8 +186,6 @@ class HomeView(APIView):
             {
                 "genres": GenreSerializer(genres, many=True).data,
                 "has_columns": Column.objects.filter(Q(is_public=True) | ~Q(url="") | Q(stories__status=Story.Status.PUBLISHED)).exists(),
-                # The author's columns (links to SunStar) shown on the home page, apart from the stories.
-                "columns": ColumnSerializer(Column.objects.exclude(url="").order_by("-created_at")[:6], many=True).data,
                 "for_you": for_you,
                 "latest": shelf(stories),
                 "free": shelf(best(stories.filter(Q(price__lte=0) | Q(column__is_public=True) | Q(all_chapters_free=True)))),

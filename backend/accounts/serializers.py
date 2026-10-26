@@ -6,6 +6,7 @@ from catalog.models import Genre
 from catalog.serializers import GenreSerializer
 
 from .models import EmailOTP, UserTheme
+from .profanity import clean
 
 User = get_user_model()
 
@@ -41,6 +42,15 @@ class UserSerializer(serializers.ModelSerializer):
         theme = getattr(user, "theme", None)
         return theme.theme_name if theme else UserTheme.Theme.LIGHT
 
+    def validate_first_name(self, value):
+        return clean(value)
+
+    def validate_last_name(self, value):
+        return clean(value)
+
+    def validate_display_name(self, value):
+        return clean(value)
+
 
 class RegisterSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -51,6 +61,15 @@ class RegisterSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         return value.strip().lower()
+
+    def validate_first_name(self, value):
+        return clean(value)
+
+    def validate_last_name(self, value):
+        return clean(value)
+
+    def validate_display_name(self, value):
+        return clean(value)
 
     def validate(self, attrs):
         validate_password(attrs["password"], user=User(email=attrs["email"], display_name=attrs.get("display_name", "")))

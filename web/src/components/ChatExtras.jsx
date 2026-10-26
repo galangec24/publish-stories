@@ -2,6 +2,7 @@ import { Download, FileText, ImagePlay, Paperclip, Reply, Search, Send, Smile, X
 import { useEffect, useRef, useState } from 'react'
 
 import { api } from '../lib/api'
+import { KIND_MESSAGE, findBadWord } from '../lib/profanity'
 import { useToast } from './ui'
 
 const EMOJIS = {
@@ -271,6 +272,7 @@ export function ChatComposer({ onSend, placeholder = 'Write a message…', disab
   const [file, setFile] = useState(null)
   const [panel, setPanel] = useState(null) // 'emoji' | 'gif'
   const [sending, setSending] = useState(false)
+  const badWord = findBadWord(draft)
   const box = useRef(null)
   const fileInput = useRef(null)
   const area = useRef(null)
@@ -285,6 +287,7 @@ export function ChatComposer({ onSend, placeholder = 'Write a message…', disab
   async function send(extra = {}) {
     const body = draft.trim()
     if (!body && !file && !extra.gif_url) return
+    if (badWord) return
     setSending(true)
     try {
       await onSend({ body, file, ...(replyTo && { reply_to: replyTo.id }), ...extra })
@@ -341,6 +344,7 @@ export function ChatComposer({ onSend, placeholder = 'Write a message…', disab
           </button>
         </div>
       )}
+      {badWord && <p className="mb-1.5 px-1 text-xs font-semibold text-rose-400">{KIND_MESSAGE}</p>}
       <form
         className="flex items-end gap-1"
         onSubmit={(e) => {
@@ -382,7 +386,7 @@ export function ChatComposer({ onSend, placeholder = 'Write a message…', disab
             }
           }}
         />
-        <button className="btn-primary h-10 w-10 shrink-0 !p-0" disabled={disabled || sending || (!draft.trim() && !file)} aria-label="Send">
+        <button className="btn-primary h-10 w-10 shrink-0 !p-0" disabled={disabled || sending || (!draft.trim() && !file) || Boolean(badWord)} aria-label="Send">
           <Send className="h-5 w-5" />
         </button>
       </form>

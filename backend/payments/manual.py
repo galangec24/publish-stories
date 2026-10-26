@@ -26,6 +26,8 @@ from rest_framework.views import APIView
 
 from accounts.brevo import EmailSendError, send_email
 from accounts.permissions import IsAdmin
+from accounts.profanity import MESSAGE as PROFANITY_MESSAGE
+from accounts.profanity import find_bad_word
 from catalog.images import InvalidImage, normalize_image
 from catalog.models import Story
 from notifications.realtime import push_admins
@@ -160,6 +162,8 @@ class ManualPaymentView(APIView):
 
         user = request.user if request.user.is_authenticated else None
         payer_name = str(data.get("payer_name", "")).strip()[:120] or (first_name(user) if user else "")
+        if find_bad_word(payer_name):
+            return Response({"payer_name": [PROFANITY_MESSAGE]}, status=400)
         payer_email = str(data.get("payer_email", "")).strip()[:254] or (user.email if user else "")
         if payer_email:
             try:

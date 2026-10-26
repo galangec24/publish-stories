@@ -375,6 +375,11 @@ export function SupportChat() {
           )}
 
           <div ref={list} className="flex-1 space-y-2 overflow-y-auto bg-bg-2/40 px-3 py-4">
+            {thread?.archived_at && (
+              <p className="mx-auto max-w-[90%] rounded-xl bg-surface-2 px-3 py-2 text-center text-xs text-muted">
+                Your earlier messages were archived after 30 days without activity. This is a new conversation.
+              </p>
+            )}
             {messages === null && <p className="py-10 text-center text-sm text-muted">Loading…</p>}
             {messages?.length === 0 && (
               <div className="py-8 text-center text-sm text-muted">

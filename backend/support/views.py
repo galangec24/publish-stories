@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 
 from accounts.brevo import EmailSendError, send_email
 from accounts.permissions import IsAdmin
+from accounts.profanity import clean
 from notifications.realtime import push_admins, push_user
 from payments.access import client_ip, device_key, network_key
 from payments.models import new_access_code
@@ -45,6 +46,9 @@ class MessageInput(serializers.Serializer):
     body = serializers.CharField(max_length=2000, trim_whitespace=True, required=False, allow_blank=True)
     reply_to = serializers.IntegerField(required=False, allow_null=True)
     gif_url = serializers.URLField(max_length=500, required=False, allow_blank=True)
+
+    def validate_body(self, value):
+        return clean(value)
 
     def validate_gif_url(self, value):
         if value and not is_gif_url(value):
@@ -173,7 +177,40 @@ def masked_ip(request):
     return ":".join(ip.exploded.split(":")[:4]) + ":•"
 
 
+INACTIVE_DAYS = 30
+
+
+def archive_if_inactive(conversation):
+    """After 30 days without a message, delete the thread's messages and files; the reader is told
+    their earlier messages were archived, and what they send next starts a new conversation."""
+    if conversation is None or not conversation.last_message_at:
+        return conversation
+    if timezone.now() - conversation.last_message_at < timedelta(days=INACTIVE_DAYS):
+        return conversation
+    for key in conversation.messages.exclude(file_key="").values_list("file_key", flat=True):
+        storage.delete(key)
+    conversation.messages.all().delete()
+    now = timezone.now()
+    Conversation.objects.filter(pk=conversation.pk).update(
+        archived_at=now, last_message_at=None, unread_for_admin=0, unread_for_user=0
+    )
+    conversation.archived_at, conversation.last_message_at = now, None
+    conversation.unread_for_admin = conversation.unread_for_user = 0
+    return conversation
+
+
+def archive_inactive_threads():
+    """Run when the admin inbox opens, so idle threads are cleared even if the reader never returns."""
+    since = timezone.now() - timedelta(days=INACTIVE_DAYS)
+    for conversation in Conversation.objects.filter(last_message_at__lt=since):
+        archive_if_inactive(conversation)
+
+
 def conversation_for(request, create=False, lock=False):
+    return archive_if_inactive(_conversation_for(request, create=create, lock=lock))
+
+
+def _conversation_for(request, create=False, lock=False):
     """This reader's thread: by account, or by device for guests.
 
     A guest thread from this device moves into the account when the reader signs in.
@@ -249,6 +286,9 @@ class GuestDetails(serializers.Serializer):
     name = serializers.CharField(max_length=80, required=False, allow_blank=True)
     email = serializers.EmailField(required=False, allow_blank=True)
 
+    def validate_name(self, value):
+        return clean(value)
+
 
 class MyConversationView(APIView):
     """GET /api/support/ → my thread (opening it marks support replies as read).
@@ -295,7 +335,11 @@ class MyConversationView(APIView):
 def my_thread(conversation, request=None):
     """The reader's own view of their thread. Guests also get their chat code and the other
     recent conversations from their connection, to switch between."""
-    data = {**serialize_conversation(conversation), "messages": history(conversation)}
+    data = {
+        **serialize_conversation(conversation),
+        "messages": history(conversation),
+        "archived_at": conversation.archived_at.isoformat() if conversation.archived_at else None,
+    }
     if conversation.user_id is None:
         if not conversation.resume_code:
             conversation.resume_code = fresh_resume_code()
@@ -471,6 +515,7 @@ class AdminConversationListView(APIView):
     permission_classes = [IsAdmin]
 
     def get(self, request):
+        archive_inactive_threads()
         conversations = Conversation.objects.filter(last_message_at__isnull=False).select_related("user")[:200]
         result = []
         for conversation in conversations:

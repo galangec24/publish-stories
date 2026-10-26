@@ -60,22 +60,36 @@ def plain_text(ops):
     return "".join(op["insert"] if isinstance(op.get("insert"), str) else " " for op in ops or [])
 
 
+BOLD_HEADING_MAX_WORDS = 15
+
+
 def headings(ops):
-    """Titles, subtitles and sections (Heading 1-3) in order: [{"level": 1, "text": "Part One"}, ...]."""
-    out, line = [], []
+    """Titles, subtitles and sections in order: [{"level": 1, "text": "Part One"}, ...].
+
+    A line counts when it uses Heading 1-3, or when the whole line is bold and short
+    (authors often bold a title instead of using a heading style); those are level 2.
+    """
+    out, runs = [], []
     for op in ops or []:
-        insert = op.get("insert")
+        insert, attrs = op.get("insert"), op.get("attributes") or {}
         if not isinstance(insert, str):
+            runs.append(("￼", {}))  # a picture on the line: not a title
             continue
         parts = insert.split("\n")
         for i, part in enumerate(parts):
-            line.append(part)
+            if part:
+                runs.append((part, attrs))
             if i < len(parts) - 1:
-                level = (op.get("attributes") or {}).get("header")
-                text = "".join(line).strip()
-                if level in (1, 2, 3) and text:
-                    out.append({"level": level, "text": text[:200]})
-                line = []
+                text = "".join(t for t, _ in runs).strip()
+                level = attrs.get("header")
+                written = [a for t, a in runs if t.strip()]
+                bold_line = bool(written) and all(a.get("bold") for a in written)
+                if text and "￼" not in text and not attrs.get("list"):
+                    if level in (1, 2, 3):
+                        out.append({"level": level, "text": text[:200]})
+                    elif bold_line and len(text.split()) <= BOLD_HEADING_MAX_WORDS:
+                        out.append({"level": 2, "text": text[:200]})
+                runs = []
     return out
 
 

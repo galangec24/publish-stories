@@ -21,6 +21,8 @@ class Conversation(models.Model):
     last_message_at = models.DateTimeField(null=True, blank=True, db_index=True)
     unread_for_admin = models.PositiveIntegerField(default=0)
     unread_for_user = models.PositiveIntegerField(default=0)
+    # Set when the messages were cleared after 30 days without activity (the reader is told).
+    archived_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-last_message_at", "-id"]

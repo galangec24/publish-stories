@@ -76,3 +76,13 @@ def load(key):
     if response.status_code >= 300:
         raise StorageError(f"Download failed ({response.status_code})")
     return response.content
+
+
+def delete(key):
+    """Remove a stored attachment (best effort: a file that's already gone is fine)."""
+    StoredFile.objects.filter(key=key).delete()
+    if _supabase():
+        try:
+            requests.delete(f"{settings.SUPABASE_URL}/storage/v1/object/{BUCKET}/{key}", headers=_headers(), timeout=15)
+        except requests.RequestException:
+            pass

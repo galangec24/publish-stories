@@ -375,3 +375,15 @@ class ChapterHeadingsTests(APITestCase):
         self.assertEqual([c["headings"] for c in listed], [chapter.headings, []])
         saved = self.client.patch(f"/api/admin/chapters/{chapter.id}/", {"content": [{"insert": "New"}, {"insert": "\n", "attributes": {"header": 2}}]}, format="json").data
         self.assertEqual(saved["headings"], [{"level": 2, "text": "New"}])
+
+
+class BoldTitleTests(TestCase):
+    def test_short_fully_bold_lines_count_as_sections(self):
+        ops = [
+            {"insert": "The Woman Who Came Back", "attributes": {"bold": True}}, {"insert": "\n"},
+            {"insert": "She walked in. "}, {"insert": "Loudly", "attributes": {"bold": True}}, {"insert": ".\n"},  # partly bold: no
+            {"insert": " ".join(["word"] * 20), "attributes": {"bold": True}}, {"insert": "\n"},  # too long: no
+            {"insert": "Item", "attributes": {"bold": True}}, {"insert": "\n", "attributes": {"list": "bullet"}},  # list: no
+            {"insert": "Part Two"}, {"insert": "\n", "attributes": {"header": 1}},
+        ]
+        self.assertEqual(delta.headings(ops), [{"level": 2, "text": "The Woman Who Came Back"}, {"level": 1, "text": "Part Two"}])
