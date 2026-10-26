@@ -74,7 +74,8 @@ Legend: 🌐 anyone · 👤 signed in · 🛡️ admin
 | Path | Purpose |
 |---|---|
 | `admin/stories/` (CRUD), `…/<id>/publish/` (`{price?}`), `…/<id>/unpublish/` | Stories. The price is read-only once paid (`price_locked`) |
-| `admin/stories/<id>/chapters/`, `…/chapters/reorder/`, `admin/chapters/<id>/` | Chapters (titles unique per story; the revision guards against overwrites) |
+| `admin/stories/<id>/chapters/`, `…/chapters/reorder/`, `admin/chapters/<id>/` | Chapters (titles unique per story; the revision guards against overwrites). DELETE moves a chapter to Recently deleted |
+| `admin/stories/<id>/chapters/deleted/`, `POST admin/chapters/<id>/restore/` | Recently deleted chapters (kept 30 days) and restoring one in place |
 | `admin/stories/import/`, `admin/stories/import-one/` | Bulk import, or one manuscript with `preview=true` first |
 | `admin/images/` | Upload a picture → URL |
 | `admin/genres/`, `admin/columns/` | CRUD |

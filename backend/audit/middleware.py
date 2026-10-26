@@ -28,6 +28,7 @@ ROUTES = [
     ({"POST"}, r"admin/stories/(?P<id>\d+)/chapters/reorder/$", "Reordered chapters", "story", "catalog.Story"),
     ({"PATCH", "PUT"}, r"admin/chapters/(?P<id>\d+)/$", "Edited chapter", "chapter", "catalog.Chapter"),
     ({"DELETE"}, r"admin/chapters/(?P<id>\d+)/$", "Deleted chapter", "chapter", "catalog.Chapter"),
+    ({"POST"}, r"admin/chapters/(?P<id>\d+)/restore/$", "Restored chapter", "chapter", "catalog.Chapter"),
     ({"POST"}, r"admin/stories/import/$", "Bulk imported stories", "story", None),
     ({"POST"}, r"admin/stories/import-one/$", "Imported a manuscript", "story", None),
     ({"PUT", "PATCH"}, r"admin/about/$", "Edited About me", "about", None),

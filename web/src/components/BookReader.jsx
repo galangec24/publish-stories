@@ -20,7 +20,6 @@ export function BookReader({ children, onPrevChapter, onNextChapter, hasPrev, ha
   const [pages, setPages] = useState(1)
   const [spread, setSpread] = useState(false)
   const [size, setSize] = useState({ w: 0, h: 0 })
-  const [turn, setTurn] = useState(null) // 'next' | 'prev' for the flip animation
   const pointer = useRef(null)
 
   // Measure the frame; two-page spreads from 1024px wide.
@@ -56,11 +55,9 @@ export function BookReader({ children, onPrevChapter, onNextChapter, hasPrev, ha
     (direction) => {
       if (direction > 0) {
         if (page < pages - 1) {
-          setTurn('next')
           setPage(page + 1)
         } else if (hasNext) onNextChapter()
       } else if (page > 0) {
-        setTurn('prev')
         setPage(page - 1)
       } else if (hasPrev) onPrevChapter()
     },
@@ -77,11 +74,6 @@ export function BookReader({ children, onPrevChapter, onNextChapter, hasPrev, ha
     return () => window.removeEventListener('keydown', onKey)
   }, [go])
 
-  useEffect(() => {
-    if (!turn) return
-    const t = setTimeout(() => setTurn(null), 550)
-    return () => clearTimeout(t)
-  }, [turn, page])
 
   const onPointerDown = (e) => {
     // React passes events from portals (e.g. the unlock dialog) up to here; only the page itself turns pages.
@@ -136,14 +128,6 @@ export function BookReader({ children, onPrevChapter, onNextChapter, hasPrev, ha
         >
           {children}
         </div>
-        {/* Page-turn sheen sweeping across, for a paper feel */}
-        {turn && (
-          <div
-            key={`${turn}${page}`}
-            className={`pointer-events-none absolute inset-y-0 z-20 w-1/2 ${turn === 'next' ? 'right-0 origin-left animate-[page-turn-next_0.55s_ease-out]' : 'left-0 origin-right animate-[page-turn-prev_0.55s_ease-out]'}`}
-            style={{ background: 'linear-gradient(90deg, rgba(0,0,0,0.12), rgba(255,255,255,0.08) 40%, transparent)' }}
-          />
-        )}
       </div>
 
       <div className="mt-5 flex items-center gap-3">

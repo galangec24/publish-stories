@@ -180,6 +180,13 @@ class StoryView(models.Model):
         constraints = [models.UniqueConstraint(fields=["story", "viewer_key", "date"], name="one_view_per_reader_per_day")]
 
 
+class LiveChapterManager(models.Manager):
+    """Chapters that aren't in "Recently deleted". Used everywhere by default (and by story.chapters)."""
+
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)
+
+
 class Chapter(models.Model):
     story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="chapters")
     title = models.CharField(max_length=200, blank=True)
@@ -190,9 +197,15 @@ class Chapter(models.Model):
     # edits from two admins are rejected instead of silently overwritten.
     revision = models.PositiveIntegerField(default=1)
     updated_at = models.DateTimeField(auto_now=True)
+    # Deleting a chapter only sets this ("Recently deleted", restorable for 30 days).
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    objects = LiveChapterManager()
+    all_objects = models.Manager()
 
     class Meta:
         ordering = ["order", "id"]
+        base_manager_name = "all_objects"
 
     def save(self, *args, **kwargs):
         self.content = delta.normalize(self.content)

@@ -1,10 +1,12 @@
 """Admin endpoints under /api/admin/: genres, columns, the Story Studio and bulk import."""
 import json
+from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
 from django.db.models import F, Prefetch, Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
@@ -165,14 +167,61 @@ class AdminChapterDetailView(generics.RetrieveUpdateDestroyAPIView):
         return Response(self.get_serializer(chapter).data)
 
     def perform_destroy(self, instance):
+        """Moves the chapter to "Recently deleted" (kept 30 days); its old position is kept for restoring."""
         story = instance.story
         if story.chapters.count() <= 1:
             raise ValidationError({"detail": "A story needs at least one chapter."})
-        instance.delete()
+        Chapter.all_objects.filter(pk=instance.pk).update(deleted_at=timezone.now())
         for index, chapter in enumerate(story.chapters.all()):
             if chapter.order != index:
                 Chapter.objects.filter(pk=chapter.pk).update(order=index)
         story.refresh_word_count()
+
+
+DELETED_KEEP_DAYS = 30
+
+
+class AdminDeletedChaptersView(APIView):
+    """GET /api/admin/stories/<id>/chapters/deleted/ — "Recently deleted" (older than 30 days are purged)."""
+
+    permission_classes = [IsAdmin]
+
+    def get(self, request, story_id):
+        story = get_object_or_404(Story, pk=story_id)
+        trash = Chapter.all_objects.filter(story=story, deleted_at__isnull=False)
+        trash.filter(deleted_at__lt=timezone.now() - timedelta(days=DELETED_KEEP_DAYS)).delete()
+        return Response(
+            [
+                {
+                    "id": c.id,
+                    "title": c.title,
+                    "word_count": c.word_count,
+                    "deleted_at": c.deleted_at.isoformat(),
+                    "purge_at": (c.deleted_at + timedelta(days=DELETED_KEEP_DAYS)).isoformat(),
+                    "excerpt": " ".join(delta.plain_text(c.content).split())[:140],
+                }
+                for c in trash.order_by("-deleted_at")
+            ]
+        )
+
+
+class AdminRestoreChapterView(APIView):
+    """POST /api/admin/chapters/<id>/restore/ — put a deleted chapter back where it was."""
+
+    permission_classes = [IsAdmin]
+
+    def post(self, request, pk):
+        with transaction.atomic():
+            chapter = get_object_or_404(Chapter.all_objects.select_for_update(), pk=pk, deleted_at__isnull=False)
+            story = chapter.story
+            position = min(chapter.order, story.chapters.count())
+            story.chapters.filter(order__gte=position).update(order=F("order") + 1)
+            title = chapter.title
+            if story.chapters.filter(title__iexact=title).exists():
+                title = f"{title} (restored)"[:200]
+            Chapter.all_objects.filter(pk=pk).update(deleted_at=None, order=position, title=title)
+        story.refresh_word_count()
+        return Response(AdminChapterSerializer(Chapter.objects.get(pk=pk)).data)
 
 
 class AdminChapterReorderView(APIView):

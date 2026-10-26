@@ -31,6 +31,7 @@ import {
   Sparkles,
   Strikethrough,
   Trash2,
+  ArchiveRestore,
   Underline,
   Undo2,
   X,
@@ -294,7 +295,7 @@ export function StoryStudio() {
   }
 
   async function deleteChapter(ch) {
-    if (!window.confirm(`Delete "${ch.title}"? Its text will be removed permanently.`)) return
+    if (!window.confirm(`Delete "${ch.title}"? You can restore it from Recently deleted for 30 days.`)) return
     try {
       await api.delete(`admin/chapters/${ch.id}/`)
       const wasCurrent = ch.id === chapterRef.current.id
@@ -304,6 +305,28 @@ export function StoryStudio() {
       }
       const data = await reloadStory()
       if (wasCurrent && data.chapters.length) await openChapter(data.chapters[0].id, true)
+      toast(`“${ch.title}” moved to Recently deleted.`)
+    } catch (e) {
+      toast(e, 'error')
+    }
+  }
+
+  // "Recently deleted": chapters can be restored for 30 days.
+  const [trash, setTrash] = useState(null) // null = closed
+  async function openTrash() {
+    try {
+      setTrash(await api.get(`admin/stories/${id}/chapters/deleted/`))
+    } catch (e) {
+      toast(e, 'error')
+    }
+  }
+  async function restoreChapter(ch) {
+    try {
+      const restored = await api.post(`admin/chapters/${ch.id}/restore/`)
+      setTrash((list) => list.filter((c) => c.id !== ch.id))
+      await reloadStory()
+      await openChapter(restored.id)
+      toast(`“${restored.title}” is back.`)
     } catch (e) {
       toast(e, 'error')
     }
@@ -689,6 +712,9 @@ export function StoryStudio() {
                   <LockOpen className="inline h-3 w-3" /> free · <Lock className="inline h-3 w-3" /> paid
                 </span>
               )}
+              <button className="rounded-lg px-1.5 text-muted hover:text-ink" title="Recently deleted chapters" onClick={openTrash}>
+                <ArchiveRestore className="h-4 w-4" />
+              </button>
               <button className="rounded-lg px-2 text-lg text-muted hover:text-ink" title="New chapter" onClick={() => addChapter()}>
                 <Plus className="h-5 w-5" />
               </button>
@@ -855,6 +881,32 @@ export function StoryStudio() {
           onSave={saveSettings}
           onUploadCover={uploadCover}
         />
+      )}
+
+      {trash && (
+        <Modal title="Recently deleted chapters">
+          <p className="text-sm text-muted">Deleted chapters stay here for 30 days. Restoring puts a chapter back where it was.</p>
+          <div className="mt-4 max-h-80 space-y-2 overflow-y-auto">
+            {!trash.length && <p className="py-6 text-center text-sm text-muted">Nothing here.</p>}
+            {trash.map((c) => (
+              <div key={c.id} className="flex items-start gap-3 rounded-xl border border-line p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{c.title || 'Untitled'}</p>
+                  <p className="text-xs text-muted">
+                    {c.word_count} words · deleted {new Date(c.deleted_at).toLocaleDateString()} · gone after {new Date(c.purge_at).toLocaleDateString()}
+                  </p>
+                  {c.excerpt && <p className="mt-1 line-clamp-2 text-xs text-muted italic">{c.excerpt}</p>}
+                </div>
+                <button className="btn-primary !px-3 !py-1.5 text-xs" onClick={() => restoreChapter(c)}>
+                  <ArchiveRestore className="h-3.5 w-3.5" /> Restore
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 flex justify-end">
+            <button className="btn-ghost" onClick={() => setTrash(null)}>Close</button>
+          </div>
+        </Modal>
       )}
 
       {publishOpen && story && (

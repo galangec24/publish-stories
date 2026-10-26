@@ -322,3 +322,36 @@ class ChapterRulesTests(APITestCase):
         from .serializers import unique_titles
 
         self.assertEqual(unique_titles(["Prologue", "One", "prologue", "Prologue"]), ["Prologue", "One", "prologue (2)", "Prologue (3)"])
+
+
+
+class RecentlyDeletedChaptersTests(APITestCase):
+    def test_delete_is_restorable_in_place(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        admin = User.objects.create_user(email="admin@example.com", password="x", is_admin=True)
+        self.client.force_authenticate(admin)
+        story = Story.objects.create(title="Trash", status="published")
+        one, two, three = (Chapter.objects.create(story=story, title=f"Chapter {i}", order=i - 1, content=doc(f"p{i}")) for i in (1, 2, 3))
+
+        self.assertEqual(self.client.delete(f"/api/admin/chapters/{two.id}/").status_code, 204)
+        self.assertEqual([c["title"] for c in self.client.get(f"/api/stories/{story.slug}/").data["chapters"]], ["Chapter 1", "Chapter 3"])
+        trash = self.client.get(f"/api/admin/stories/{story.id}/chapters/deleted/").data
+        self.assertEqual([(t["title"], t["excerpt"]) for t in trash], [("Chapter 2", "p2")])
+
+        # A new chapter takes the old name meanwhile; the restored one gets "(restored)".
+        self.client.post(f"/api/admin/stories/{story.id}/chapters/", {"title": "Chapter 2"}, format="json")
+        restored = self.client.post(f"/api/admin/chapters/{two.id}/restore/").data
+        self.assertEqual(restored["title"], "Chapter 2 (restored)")
+        titles = [c["title"] for c in self.client.get(f"/api/stories/{story.slug}/").data["chapters"]]
+        self.assertEqual(titles, ["Chapter 1", "Chapter 2 (restored)", "Chapter 3", "Chapter 2"])
+        self.assertEqual(self.client.get(f"/api/admin/stories/{story.id}/chapters/deleted/").data, [])
+        self.assertEqual(self.client.post(f"/api/admin/chapters/{two.id}/restore/").status_code, 404)  # not deleted
+
+        # After 30 days the trash is emptied.
+        self.client.delete(f"/api/admin/chapters/{three.id}/")
+        Chapter.all_objects.filter(pk=three.pk).update(deleted_at=timezone.now() - timedelta(days=31))
+        self.assertEqual(self.client.get(f"/api/admin/stories/{story.id}/chapters/deleted/").data, [])
+        self.assertFalse(Chapter.all_objects.filter(pk=three.pk).exists())

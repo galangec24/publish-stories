@@ -21,6 +21,8 @@ urlpatterns = [
     path("comments/<int:pk>/<str:action>/", AdminCommentModerateView.as_view()),
     path("stories/<int:story_id>/chapters/", views.AdminChapterListView.as_view()),
     path("stories/<int:story_id>/chapters/reorder/", views.AdminChapterReorderView.as_view()),
+    path("stories/<int:story_id>/chapters/deleted/", views.AdminDeletedChaptersView.as_view()),
+    path("chapters/<int:pk>/restore/", views.AdminRestoreChapterView.as_view()),
     path("chapters/<int:pk>/", views.AdminChapterDetailView.as_view()),
     *router.urls,
 ]

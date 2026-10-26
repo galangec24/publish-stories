@@ -16,7 +16,7 @@ This guide covers everyday tasks on **Publish Stories**. Sign in at https://publ
 ### In the Story Studio
 - **Chapters** are listed on the left (Navigation):
   - **+** adds a chapter.
-  - Hover a chapter to **rename** or **delete** it.
+  - Hover a chapter to **rename** or **delete** it. Deleted chapters go to **Recently deleted** (the box-with-arrow button at the top of the list) for 30 days; **Restore** puts one back where it was.
   - Drag a chapter to reorder it.
   - Each chapter needs a different name.
 - **The lock next to each chapter** decides what readers get free:

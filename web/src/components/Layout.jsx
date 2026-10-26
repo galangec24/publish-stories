@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet, useLocation, useSearchParams } from 'react-route
 
 import { LanguagePicker } from '../i18n/LanguagePicker'
 import { useAuth } from '../lib/auth'
+import { startNoCopy } from '../lib/noCopy'
 import { InstallButton } from '../pwa/InstallPrompt'
 import { useLive } from '../realtime/LiveProvider'
 import { AdminMessagesButton } from './AdminMessagesButton'
@@ -18,6 +19,12 @@ export function Layout() {
   const { setChatOpen } = useLive()
   const { pathname, hash } = useLocation()
   const [params, setParams] = useSearchParams()
+
+  // Readers can't copy the site's text (admins can: the Studio needs it).
+  useEffect(() => {
+    if (isAdmin) return
+    return startNoCopy()
+  }, [isAdmin])
 
   // In-page links such as /#about: scroll once the target has rendered.
   useEffect(() => {
