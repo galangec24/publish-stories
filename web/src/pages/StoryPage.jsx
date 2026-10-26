@@ -4,6 +4,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { BookReader } from '../components/BookReader'
 import { ProtectedContent } from '../components/ProtectedContent'
+import { JumpMenu } from '../components/JumpMenu'
 import { QrPaywall } from '../components/QrPaywall'
 import { StoryRating } from '../components/StoryRating'
 import { ThemePicker } from '../components/ThemePicker'
@@ -357,31 +358,26 @@ export function StoryPage() {
       </aside>
 
       <article className="min-w-0">
-        <label className="mb-3 flex items-center gap-2 text-sm">
-          <span className="shrink-0 text-muted">Jump to</span>
-          <select
-            className="input !py-2"
-            value={`c:${index}`}
-            onChange={(e) => {
-              const [kind, at, id] = e.target.value.split(':')
-              if (kind === 'c') go(Number(at))
-              else openSection(Number(at), id)
-            }}
-          >
-            {s.chapters.map((c, i) => [
-              <option key={c.id} value={`c:${i}`}>
-                {c.content === null ? '🔒 ' : readIds.has(c.id) ? '✓ ' : ''}
-                {c.title}
-              </option>,
-              ...sectionsOf(c).map((h) => (
-                <option key={`${c.id}-${h.id}`} value={`s:${i}:${h.id}`}>
-                  {'\u00a0\u00a0\u00a0'.repeat(h.level)}
-                  {h.text}
-                </option>
-              )),
-            ])}
-          </select>
-        </label>
+        <JumpMenu
+          label={chapter?.title || 'Chapters'}
+          items={s.chapters.flatMap((c, i) => [
+            {
+              key: `c${c.id}`,
+              label: c.title,
+              level: 0,
+              locked: c.content === null,
+              read: readIds.has(c.id),
+              current: i === index,
+              onPick: () => go(i),
+            },
+            ...sectionsOf(c).map((h) => ({
+              key: `s${c.id}-${h.id}`,
+              label: h.text,
+              level: h.level,
+              onPick: () => openSection(i, h.id),
+            })),
+          ])}
+        />
         <ProtectedContent>
           {mode === 'book' ? (
             <div className="rounded-3xl border border-line bg-page px-6 py-8 shadow-2xl shadow-black/20 sm:px-12 sm:py-10">
