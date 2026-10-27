@@ -131,7 +131,7 @@ export function Book3D({ story, size = 'md' }) {
   )
 }
 
-export function Shelf({ title, subtitle, stories, link, id }) {
+export function Shelf({ title, subtitle, stories, link, id, trailing }) {
   if (!stories?.length) return null
   return (
     <section id={id} className="mt-12 scroll-mt-40">
@@ -151,6 +151,7 @@ export function Shelf({ title, subtitle, stories, link, id }) {
         {stories.map((s) => (
           <Book3D key={s.id} story={s} />
         ))}
+        {trailing}
       </div>
     </section>
   )

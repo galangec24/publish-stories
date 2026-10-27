@@ -1,5 +1,5 @@
 import { ArrowUpRight, BookOpen, Coffee, HeartHandshake, MessagesSquare, Newspaper, Sparkles, Tags, X } from 'lucide-react'
-import { useEffect, useLayoutEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
 import { AboutMe } from '../components/AboutMe'
@@ -14,7 +14,12 @@ import { formatCount } from '../lib/readingMode'
 import { DEFAULT_ABOUT } from '../lib/aboutDefaults'
 import { useAsync, useCachedAsync } from '../lib/useAsync'
 
+const Hero3D = lazy(() => import('../components/Hero3D'))
 const IDLE_MS = 5 * 60 * 1000 // after this long with no activity, the home page returns to "Most read"
+
+function prefersReducedMotion() {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+}
 
 export function Home() {
   const { user } = useAuth()
@@ -110,6 +115,7 @@ export function Home() {
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [hasPopular, tab])
+  const featured = useMemo(() => data?.latest?.slice(0, 3) || [], [data])
 
   return (
     <>
@@ -167,7 +173,17 @@ export function Home() {
           </div>
         </div>
         <div className="relative h-[340px] sm:h-[420px]">
-          <AuthorPortrait about={about.data} />
+          {prefersReducedMotion() ? (
+            <div className="flex h-full items-center justify-center gap-4">
+              {featured.map((s) => (
+                <Book3D key={s.id} story={s} />
+              ))}
+            </div>
+          ) : (
+            <Suspense fallback={null}>
+              <Hero3D />
+            </Suspense>
+          )}
         </div>
       </section>
 
@@ -220,7 +236,7 @@ export function Home() {
         <ColumnsTab columns={columns.data} loading={columns.loading} author={about.data} />
       ) : (
         <>
-          <Shelf id="most-read" title="Most read" subtitle="By views" stories={data.popular} />
+          <Shelf id="most-read" title="Most read" subtitle="By views" stories={data.popular} trailing={<AuthorPortrait about={about.data} />} />
           {user && (
             <Shelf
               title="For you"
