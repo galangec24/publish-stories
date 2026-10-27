@@ -1,5 +1,5 @@
 import { ArrowUpRight, BookOpen, Coffee, HeartHandshake, MessagesSquare, Newspaper, Sparkles, Tags, X } from 'lucide-react'
-import { lazy, Suspense, useLayoutEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
 import { AboutMe } from '../components/AboutMe'
@@ -14,6 +14,7 @@ import { DEFAULT_ABOUT } from '../lib/aboutDefaults'
 import { useAsync, useCachedAsync } from '../lib/useAsync'
 
 const Hero3D = lazy(() => import('../components/Hero3D'))
+const IDLE_MS = 5 * 60 * 1000 // after this long with no activity, the home page returns to "Most read"
 
 function prefersReducedMotion() {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -79,6 +80,40 @@ export function Home() {
       stop()
     }
   }, [openAtMostRead, hasPopular, location.key])
+
+  // Left alone for a while (no scroll, tap, mouse or key), or back to the tab after a while
+  // away: return to "Most read".
+  useEffect(() => {
+    if (!hasPopular || tab !== 'stories') return
+    let last = Date.now()
+    let timer
+    const goToMostRead = () => {
+      const shelf = document.getElementById('most-read')
+      const typing = document.activeElement?.matches?.('input, textarea, [contenteditable="true"]')
+      if (!shelf || typing) return
+      const offset = parseFloat(getComputedStyle(shelf).scrollMarginTop) || 0
+      window.scrollTo({ top: shelf.getBoundingClientRect().top + window.scrollY - offset, behavior: 'smooth' })
+    }
+    const restart = () => {
+      last = Date.now()
+      clearTimeout(timer)
+      timer = setTimeout(goToMostRead, IDLE_MS)
+    }
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - last >= IDLE_MS) goToMostRead()
+      restart()
+    }
+    const events = ['scroll', 'wheel', 'touchstart', 'mousemove', 'mousedown', 'keydown']
+    events.forEach((e) => window.addEventListener(e, restart, { passive: true }))
+    document.addEventListener('visibilitychange', onVisible)
+    restart()
+    return () => {
+      clearTimeout(timer)
+      events.forEach((e) => window.removeEventListener(e, restart))
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [hasPopular, tab])
   const featured = useMemo(() => data?.latest?.slice(0, 3) || [], [data])
 
   return (
