@@ -12,15 +12,15 @@ function isNew(story) {
 }
 
 /** The cover art: the uploaded picture, or a designed cover in the story's colours and title font. */
-function Cover({ story, color }) {
+function Cover({ story, color, genre }) {
   if (story.cover_image) return <img src={story.cover_image} alt="" className="h-full w-full object-cover" loading="lazy" />
   return (
     <div className="book-cover-art relative flex h-full flex-col items-center justify-between px-3 py-4 text-center text-white">
       {/* gold frame */}
       <div className="pointer-events-none absolute inset-2 rounded-sm border border-amber-200/45" />
       <div className="pointer-events-none absolute inset-[11px] rounded-sm border border-amber-200/20" />
-      <span className="relative text-[9px] font-semibold tracking-[0.3em] text-amber-100/90 uppercase">
-        {story.column?.title || story.genres?.[0]?.name || 'Story'}
+      <span className="relative line-clamp-2 text-[9px] leading-snug font-semibold tracking-[0.2em] text-amber-100/90 uppercase">
+        {story.column?.title || genre?.name || story.genres?.map((g) => g.name).join(' · ') || 'Story'}
       </span>
       <span
         className="relative block h-11 max-w-full min-w-11 truncate rounded-full border border-amber-200/50 px-3.5 text-center text-lg leading-[2.625rem] text-amber-100 shadow-inner"
@@ -38,10 +38,13 @@ function Cover({ story, color }) {
   )
 }
 
-/** A story shown as a physical book: it lifts and turns toward the cursor, with light sweeping over the cover. */
-export function Book3D({ story, size = 'md' }) {
+/**
+ * A story shown as a physical book: it lifts and turns toward the cursor, with light sweeping over the cover.
+ * On a genre's shelf, `genre` is that shelf's genre, so the cover shows it rather than the story's first one.
+ */
+export function Book3D({ story, size = 'md', genre }) {
   const ref = useRef(null)
-  const color = story.genres?.[0]?.color || '#6a4ff0'
+  const color = (genre || story.genres?.[0])?.color || '#6a4ff0'
   const width = size === 'lg' ? 'w-48' : 'w-36 sm:w-40'
   const ribbon = story.is_free ? ['FREE', 'bg-emerald-500 text-white'] : isNew(story) ? ['NEW', 'bg-accent text-accent-ink'] : null
 
@@ -78,7 +81,7 @@ export function Book3D({ story, size = 'md' }) {
             className="absolute inset-0 overflow-hidden rounded-r-md rounded-l-sm shadow-[10px_14px_30px_-8px_rgba(0,0,0,0.55)]"
             style={{ background: `linear-gradient(150deg, ${color}, color-mix(in srgb, ${color} 40%, #0b0716))` }}
           >
-            <Cover story={story} color={color} />
+            <Cover story={story} color={color} genre={genre} />
             {ribbon && (
               <span className={`absolute top-3 -right-8 w-28 rotate-45 py-0.5 text-center text-[9px] font-bold tracking-[0.2em] shadow-md ${ribbon[1]}`}>
                 {ribbon[0]}
@@ -131,7 +134,7 @@ export function Book3D({ story, size = 'md' }) {
   )
 }
 
-export function Shelf({ title, subtitle, stories, link, id, trailing }) {
+export function Shelf({ title, subtitle, stories, link, id, trailing, genre }) {
   if (!stories?.length) return null
   return (
     <section id={id} className="mt-12 scroll-mt-40">
@@ -149,7 +152,7 @@ export function Shelf({ title, subtitle, stories, link, id, trailing }) {
       {/* Each book draws its own shelf under it, so the ledge never crosses the text. */}
       <div className="flex gap-6 overflow-x-auto px-6 pt-4 pb-8 [scrollbar-width:thin]">
         {stories.map((s) => (
-          <Book3D key={s.id} story={s} />
+          <Book3D key={s.id} story={s} genre={genre} />
         ))}
         {trailing}
       </div>

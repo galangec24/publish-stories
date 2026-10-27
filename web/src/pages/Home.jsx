@@ -249,7 +249,7 @@ export function Home() {
           <Shelf title="New & updated" stories={data.latest} trailing={meetAuthor} />
           <Shelf title="Free reads" stories={data.free} trailing={meetAuthor} />
           {(data.by_genre || []).map((row) => (
-            <Shelf key={row.genre.id} title={row.genre.name} stories={row.stories} trailing={meetAuthor} />
+            <Shelf key={row.genre.id} title={row.genre.name} genre={row.genre} stories={row.stories} trailing={meetAuthor} />
           ))}
           {!data.latest?.length && (
             <p className="py-16 text-center text-muted">
