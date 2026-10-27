@@ -17,6 +17,12 @@ function reload() {
 }
 
 if ('serviceWorker' in navigator) {
+  // Tell a newly arrived version this page is current, so it isn't reloaded (public/sw-takeover.js).
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data?.type === 'STORIES_PING') event.source?.postMessage({ type: 'STORIES_ALIVE' })
+  })
+  navigator.serviceWorker.startMessages?.()
+
   const hadController = Boolean(navigator.serviceWorker.controller)
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!hadController) return // first visit: this page is already the newest version

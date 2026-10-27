@@ -41,6 +41,8 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
+        // Reloads open pages of an older version (e.g. one stuck on a white page): public/sw-takeover.js
+        importScripts: ['sw-takeover.js'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],

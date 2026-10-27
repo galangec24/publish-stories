@@ -22,7 +22,7 @@
         "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
       },
       {
-        "source": "/@(|index.html|sw.js|manifest.webmanifest|registerSW.js)",
+        "source": "/@(|index.html|sw.js|sw-takeover.js|manifest.webmanifest|registerSW.js)",
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       }
     ]
