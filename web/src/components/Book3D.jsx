@@ -131,10 +131,10 @@ export function Book3D({ story, size = 'md' }) {
   )
 }
 
-export function Shelf({ title, subtitle, stories, link }) {
+export function Shelf({ title, subtitle, stories, link, id }) {
   if (!stories?.length) return null
   return (
-    <section className="mt-12">
+    <section id={id} className="mt-12 scroll-mt-40">
       <div className="mb-4 flex items-end justify-between px-1">
         <div>
           <h2 className="font-display text-2xl">{title}</h2>

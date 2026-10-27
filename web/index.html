@@ -21,6 +21,44 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Safety net: if the app hasn't started after a few seconds (an old browser, or a stored
+      // copy of the site with missing pieces), clear the stored copy once and reload; if it still
+      // can't start, show a short message instead of a white page.
+      ;(function () {
+        function clearCopy() {
+          var jobs = []
+          if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+            jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+              return Promise.all(rs.map(function (r) { return r.unregister() }))
+            }))
+          }
+          if (window.caches && caches.keys) {
+            jobs.push(caches.keys().then(function (keys) {
+              return Promise.all(keys.map(function (k) { return caches.delete(k) }))
+            }))
+          }
+          return Promise.all(jobs).catch(function () {})
+        }
+        window.__clearSiteCopy = clearCopy
+        setTimeout(function () {
+          if (window.__storiesStarted) return
+          var tried = false
+          try { tried = sessionStorage.getItem('start-retry') === '1' } catch (e) {}
+          if (!tried) {
+            try { sessionStorage.setItem('start-retry', '1') } catch (e) {}
+            clearCopy().then(function () { location.reload() })
+            return
+          }
+          document.getElementById('root').innerHTML =
+            '<div style="font-family:system-ui,sans-serif;max-width:420px;margin:15vh auto;padding:24px;text-align:center;color:#444">' +
+            '<h1 style="font-size:22px;margin:0 0 8px">Publish Stories couldn\'t start</h1>' +
+            '<p style="margin:0 0 16px">Please update your browser (Safari, Chrome or Firefox), then try again.</p>' +
+            '<button onclick="window.__clearSiteCopy().then(function(){location.reload()})" ' +
+            'style="padding:10px 18px;border:0;border-radius:12px;background:#6a4ff0;color:#fff;font-size:15px">Reload</button></div>'
+        }, 12000)
+      })()
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

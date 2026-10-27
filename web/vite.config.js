@@ -6,6 +6,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 const SITE = 'https://publish-stories-ph.web.app'
 
 export default defineConfig({
+  // Run on older Macs and phones too (Safari 14+), not only the newest browsers.
+  build: { target: ['es2020', 'safari14', 'chrome87', 'firefox78', 'edge88'] },
   plugins: [
     react(),
     tailwindcss(),

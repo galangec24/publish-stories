@@ -1,6 +1,6 @@
 import { ArrowUpRight, BookOpen, Coffee, HeartHandshake, MessagesSquare, Newspaper, Sparkles, Tags, X } from 'lucide-react'
-import { lazy, Suspense, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
 import { AboutMe } from '../components/AboutMe'
 import { AuthorBlog } from '../components/AuthorBlog'
@@ -24,6 +24,8 @@ export function Home() {
   const home = useCachedAsync(`cache:home:${user?.id || 'guest'}`, () => api.get('home/'), [user?.preferred_genres?.length])
   const about = useCachedAsync('cache:about', () => api.get('about/'), [], DEFAULT_ABOUT)
   const [params, setParams] = useSearchParams()
+  const location = useLocation()
+  const cameFromSite = location.key !== 'default' && !location.hash && !params.get('tab')
   const tab = params.get('tab') === 'columns' ? 'columns' : 'stories'
   const columns = useCachedAsync('cache:columns', () => (tab === 'columns' ? api.get('columns/') : Promise.resolve(undefined)), [tab])
   const [genreFilter, setGenreFilter] = useState(new Set())
@@ -47,6 +49,14 @@ export function Home() {
     })
 
   const data = home.data
+
+  // Arriving from another page of the site (not a first visit): open at "Most read".
+  const hasPopular = Boolean(data?.popular?.length)
+  useEffect(() => {
+    if (!cameFromSite || !hasPopular) return
+    const t = setTimeout(() => document.getElementById('most-read')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
+    return () => clearTimeout(t)
+  }, [cameFromSite, hasPopular, location.key])
   const featured = useMemo(() => data?.latest?.slice(0, 3) || [], [data])
 
   return (
@@ -91,7 +101,7 @@ export function Home() {
             </dl>
           )}
           <div className="mt-6 flex flex-wrap gap-3">
-            <a href="#browse" className="btn-primary">
+            <a href="#most-read" className="btn-primary">
               Start reading
             </a>
             {!user && (
@@ -165,9 +175,10 @@ export function Home() {
       ) : filtering ? (
         <Results stories={filtered.data} loading={filtered.loading} />
       ) : tab === 'columns' ? (
-        <ColumnsTab columns={columns.data} loading={columns.loading} />
+        <ColumnsTab columns={columns.data} loading={columns.loading} author={about.data} />
       ) : (
         <>
+          <Shelf id="most-read" title="Most read" subtitle="By views" stories={data.popular} />
           {user && (
             <Shelf
               title="For you"
@@ -175,7 +186,6 @@ export function Home() {
               stories={data.for_you}
             />
           )}
-          <Shelf title="Most read" subtitle="By views" stories={data.popular} />
           <Shelf title="New & updated" stories={data.latest} />
           <Shelf title="Free reads" stories={data.free} />
           {data.by_genre.map((row) => (
@@ -219,7 +229,7 @@ function siteName(url) {
 }
 
 /** A newspaper column: an article-style card that opens the column on its site (SunStar). */
-function ColumnCard({ column }) {
+function ColumnCard({ column, author }) {
   if (!column.url) return null
   return (
     <a
@@ -233,6 +243,17 @@ function ColumnCard({ column }) {
       </span>
       <h3 className="font-display text-xl leading-snug group-hover:text-brand">{column.title}</h3>
       {column.description && <p className="line-clamp-3 text-sm text-muted">{column.description}</p>}
+      {author?.name && (
+        <span className="flex items-center gap-2.5">
+          {author.photo_url ? (
+            <img src={author.photo_url} alt="" className="h-9 w-9 shrink-0 rounded-full bg-white object-cover object-top ring-2 ring-line" loading="lazy" />
+          ) : null}
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold text-ink">{author.name}</span>
+            <span className="block text-[11px] text-muted">Columnist</span>
+          </span>
+        </span>
+      )}
       <span className="mt-auto inline-flex items-center gap-1 text-sm font-semibold text-brand">
         Read on {siteName(column.url)} <ArrowUpRight className="h-4 w-4 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
       </span>
@@ -240,7 +261,7 @@ function ColumnCard({ column }) {
   )
 }
 
-function ColumnsTab({ columns, loading }) {
+function ColumnsTab({ columns, loading, author }) {
   if (!columns) return loading ? <Spinner /> : null
   const linked = columns.filter((c) => c.url)
   const withPieces = columns.filter((c) => c.stories?.length)
@@ -250,7 +271,7 @@ function ColumnsTab({ columns, loading }) {
       {linked.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {linked.map((c) => (
-            <ColumnCard key={c.id} column={c} />
+            <ColumnCard key={c.id} column={c} author={author} />
           ))}
         </div>
       )}
