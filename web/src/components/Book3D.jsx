@@ -23,10 +23,10 @@ function Cover({ story, color }) {
         {story.column?.title || story.genres?.[0]?.name || 'Story'}
       </span>
       <span
-        className="relative grid h-11 w-11 place-items-center rounded-full border border-amber-200/50 font-display text-xl text-amber-100 shadow-inner"
-        style={{ background: `color-mix(in srgb, ${color} 55%, #000)` }}
+        className="relative block h-11 max-w-full min-w-11 truncate rounded-full border border-amber-200/50 px-3.5 text-center text-lg leading-[2.625rem] text-amber-100 shadow-inner"
+        style={{ background: `color-mix(in srgb, ${color} 55%, #000)`, fontFamily: titleStack(story.title_font) }}
       >
-        {story.title.charAt(0)}
+        {story.title.trim().split(/\s+/)[0]}
       </span>
       <div className="relative">
         <p className="line-clamp-4 text-[17px] leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]" style={{ fontFamily: titleStack(story.title_font) }}>
