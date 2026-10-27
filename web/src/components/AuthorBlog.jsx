@@ -87,7 +87,7 @@ export function AuthorBlog({ stats, about }) {
       </div>
 
       <div className="mx-auto mt-6 grid max-w-4xl gap-4 sm:grid-cols-3">
-        {about.blog_cards.map((w, i) => {
+        {(about.blog_cards || []).map((w, i) => {
           const Icon = aboutIcon(w.icon)
           return (
           <article key={i} className="group rounded-2xl border border-line bg-surface/60 p-5 transition hover:-translate-y-1">

@@ -54,7 +54,7 @@ export function AboutMe({ about }) {
             {about.intro && <p className="mt-5 text-lg leading-relaxed whitespace-pre-line">{about.intro}</p>}
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              {about.roles.map((r, i) => {
+              {(about.roles || []).map((r, i) => {
                 const Icon = aboutIcon(r.icon)
                 return (
                 <div key={i} className="group rounded-2xl border border-line bg-surface-2/50 p-4 transition hover:-translate-y-0.5 hover:border-brand/50">
@@ -72,7 +72,7 @@ export function AboutMe({ about }) {
 
             {about.closing && <p className="mt-6 text-muted whitespace-pre-line">{about.closing}</p>}
 
-            {about.links.length > 0 && (
+            {about.links?.length > 0 && (
               <div className="mt-6 flex flex-wrap gap-3">
                 {about.links.map((l, i) => (
                   <a key={i} className="btn-ghost" href={l.url} target="_blank" rel="noreferrer noopener">

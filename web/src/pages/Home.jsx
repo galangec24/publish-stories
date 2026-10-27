@@ -22,10 +22,11 @@ function prefersReducedMotion() {
 export function Home() {
   const { user } = useAuth()
   const home = useCachedAsync(`cache:home:${user?.id || 'guest'}`, () => api.get('home/'), [user?.preferred_genres?.length])
-  const about = useCachedAsync('cache:about', () => api.get('about/'), [], DEFAULT_ABOUT)
+  const aboutRaw = useCachedAsync('cache:about', () => api.get('about/'), [], DEFAULT_ABOUT)
+  const about = { ...aboutRaw, data: { ...DEFAULT_ABOUT, ...aboutRaw.data } }
   const [params, setParams] = useSearchParams()
   const location = useLocation()
-  const cameFromSite = location.key !== 'default' && !location.hash && !params.get('tab')
+  const openAtMostRead = !location.hash && !params.get('tab')
   const tab = params.get('tab') === 'columns' ? 'columns' : 'stories'
   const columns = useCachedAsync('cache:columns', () => (tab === 'columns' ? api.get('columns/') : Promise.resolve(undefined)), [tab])
   const [genreFilter, setGenreFilter] = useState(new Set())
@@ -50,13 +51,13 @@ export function Home() {
 
   const data = home.data
 
-  // Arriving from another page of the site (not a first visit): open at "Most read".
+  // Every time the home page opens (first visit or from another page): go to "Most read".
   const hasPopular = Boolean(data?.popular?.length)
   useEffect(() => {
-    if (!cameFromSite || !hasPopular) return
-    const t = setTimeout(() => document.getElementById('most-read')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
+    if (!openAtMostRead || !hasPopular) return
+    const t = setTimeout(() => document.getElementById('most-read')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400)
     return () => clearTimeout(t)
-  }, [cameFromSite, hasPopular, location.key])
+  }, [openAtMostRead, hasPopular, location.key])
   const featured = useMemo(() => data?.latest?.slice(0, 3) || [], [data])
 
   return (
@@ -188,10 +189,10 @@ export function Home() {
           )}
           <Shelf title="New & updated" stories={data.latest} />
           <Shelf title="Free reads" stories={data.free} />
-          {data.by_genre.map((row) => (
+          {(data.by_genre || []).map((row) => (
             <Shelf key={row.genre.id} title={row.genre.name} stories={row.stories} />
           ))}
-          {!data.latest.length && (
+          {!data.latest?.length && (
             <p className="py-16 text-center text-muted">
               {data.has_columns ? 'Read her latest pieces in the Columns tab.' : 'No stories published yet. Check back soon.'}
             </p>

@@ -7,6 +7,7 @@ import { BrowserRouter } from 'react-router-dom'
 import './pwa/updates'
 
 import App from './App'
+import { CrashRecovery } from './components/CrashRecovery'
 import { ToastProvider } from './components/ui'
 import { AuthProvider } from './lib/auth'
 import { InstallProvider } from './pwa/InstallPrompt'
@@ -32,7 +33,9 @@ createRoot(document.getElementById('root')).render(
         <AuthProvider>
           <LiveProvider>
             <InstallProvider>
-              <App />
+              <CrashRecovery>
+                <App />
+              </CrashRecovery>
             </InstallProvider>
           </LiveProvider>
         </AuthProvider>
@@ -45,6 +48,7 @@ createRoot(document.getElementById('root')).render(
 window.__storiesStarted = true
 try {
   sessionStorage.removeItem('start-retry')
+  setTimeout(() => sessionStorage.removeItem('crash-retry'), 10000)
 } catch {
   /* ignore */
 }
