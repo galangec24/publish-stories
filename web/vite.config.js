@@ -12,7 +12,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'prompt', // waits for a page change to switch versions (src/pwa/updates.js)
+      registerType: 'prompt', // the page switches versions itself (src/pwa/updates.js)
       injectRegister: false,
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
@@ -36,6 +36,11 @@ export default defineConfig({
         related_applications: [{ platform: 'webapp', url: `${SITE}/manifest.webmanifest` }],
       },
       workbox: {
+        // A new version takes over without waiting for every tab to close, so a stored copy
+        // that is too old (or broken) to update itself is still replaced.
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],

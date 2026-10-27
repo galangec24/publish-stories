@@ -1,5 +1,5 @@
 import { ArrowUpRight, BookOpen, Coffee, HeartHandshake, MessagesSquare, Newspaper, Sparkles, Tags, X } from 'lucide-react'
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useLayoutEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
 import { AboutMe } from '../components/AboutMe'
@@ -51,12 +51,33 @@ export function Home() {
 
   const data = home.data
 
-  // Every time the home page opens (first visit or from another page): go to "Most read".
+  // Every time the home page opens (first visit or from another page) it shows "Most read",
+  // placed before the page is drawn; it stays there while pictures above it load, until the
+  // reader scrolls or taps.
   const hasPopular = Boolean(data?.popular?.length)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!openAtMostRead || !hasPopular) return
-    const t = setTimeout(() => document.getElementById('most-read')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400)
-    return () => clearTimeout(t)
+    const shelf = document.getElementById('most-read')
+    if (!shelf) return
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
+    const place = () => {
+      const offset = parseFloat(getComputedStyle(shelf).scrollMarginTop) || 0
+      window.scrollTo(0, shelf.getBoundingClientRect().top + window.scrollY - offset)
+    }
+    place()
+    const settle = typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null
+    settle?.observe(document.body)
+    const events = ['wheel', 'touchstart', 'keydown', 'mousedown']
+    const stop = () => {
+      settle?.disconnect()
+      events.forEach((e) => window.removeEventListener(e, stop))
+    }
+    events.forEach((e) => window.addEventListener(e, stop, { passive: true }))
+    const done = setTimeout(stop, 3000)
+    return () => {
+      clearTimeout(done)
+      stop()
+    }
   }, [openAtMostRead, hasPopular, location.key])
   const featured = useMemo(() => data?.latest?.slice(0, 3) || [], [data])
 
