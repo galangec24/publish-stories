@@ -52,6 +52,7 @@ export function Home() {
     })
 
   const data = home.data
+  const meetAuthor = <AuthorPortrait about={about.data} /> // ends every shelf, introducing the author
 
   // Every time the home page opens (first visit or from another page) it shows "Most read",
   // placed before the page is drawn; it stays there while pictures above it load, until the
@@ -236,18 +237,19 @@ export function Home() {
         <ColumnsTab columns={columns.data} loading={columns.loading} author={about.data} />
       ) : (
         <>
-          <Shelf id="most-read" title="Most read" subtitle="By views" stories={data.popular} trailing={<AuthorPortrait about={about.data} />} />
+          <Shelf id="most-read" title="Most read" subtitle="By views" stories={data.popular} trailing={meetAuthor} />
           {user && (
             <Shelf
               title="For you"
               subtitle={user.preferred_genres?.map((g) => g.name).join(' · ') || undefined}
               stories={data.for_you}
+              trailing={meetAuthor}
             />
           )}
-          <Shelf title="New & updated" stories={data.latest} />
-          <Shelf title="Free reads" stories={data.free} />
+          <Shelf title="New & updated" stories={data.latest} trailing={meetAuthor} />
+          <Shelf title="Free reads" stories={data.free} trailing={meetAuthor} />
           {(data.by_genre || []).map((row) => (
-            <Shelf key={row.genre.id} title={row.genre.name} stories={row.stories} />
+            <Shelf key={row.genre.id} title={row.genre.name} stories={row.stories} trailing={meetAuthor} />
           ))}
           {!data.latest?.length && (
             <p className="py-16 text-center text-muted">
@@ -334,7 +336,7 @@ function ColumnsTab({ columns, loading, author }) {
         </div>
       )}
       {withPieces.map((c) => (
-        <Shelf key={c.id} title={c.title} subtitle="Stories in this column" stories={c.stories} />
+        <Shelf key={c.id} title={c.title} subtitle="Stories in this column" stories={c.stories} trailing={<AuthorPortrait about={author} />} />
       ))}
     </div>
   )
