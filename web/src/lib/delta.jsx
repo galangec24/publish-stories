@@ -125,6 +125,11 @@ export function chapterHeadings(ops) {
   return out
 }
 
+/** The chapter as plain text (pictures dropped), e.g. for reading it aloud. */
+export function plainText(ops) {
+  return (ops || []).map((op) => (typeof op.insert === 'string' ? op.insert : ' ')).join('')
+}
+
 export function wordCount(text) {
   return (text.match(/\S+/g) || []).length
 }

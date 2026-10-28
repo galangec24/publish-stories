@@ -7,6 +7,7 @@ import { VoiceReel } from '../components/VoiceReel'
 import { DEFAULT_ABOUT } from '../lib/aboutDefaults'
 import { api } from '../lib/api'
 import { unlockSpeech } from '../lib/deviceVoice'
+import { plainText } from '../lib/delta'
 import { useAsync, useCachedAsync } from '../lib/useAsync'
 
 /** Reels: one short reel per chapter, swiped through one at a time. */
@@ -57,6 +58,17 @@ export function Reels() {
   )
 }
 
+// Story details per slug, fetched once: the same paywalled data the reader gets, so a reel only
+// reads a whole chapter the viewer may open.
+const stories = new Map()
+function chapterText(slug, chapterId) {
+  if (!stories.has(slug)) stories.set(slug, api.get(`stories/${slug}/`).catch((e) => (stories.delete(slug), Promise.reject(e))))
+  return stories.get(slug).then((story) => {
+    const chapter = story.chapters.find((c) => c.id === chapterId)
+    return chapter?.content ? plainText(chapter.content) : null
+  })
+}
+
 function Reel({ reel, author, muted, onSound, captions, onCaptions }) {
   const box = useRef(null)
   const [active, setActive] = useState(false)
@@ -74,7 +86,16 @@ function Reel({ reel, author, muted, onSound, captions, onCaptions }) {
     <section ref={box} className="flex h-full snap-start snap-always items-center justify-center px-2 py-3">
       <div className="relative aspect-[9/16] h-full max-w-full overflow-hidden rounded-3xl bg-black shadow-2xl shadow-black/50">
         {voice ? (
-          <VoiceReel script={reel.script} color={story.color} author={author} title={story.title} active={active} muted={muted} />
+          <VoiceReel
+            script={reel.script}
+            color={story.color}
+            author={author}
+            title={story.title}
+            chapterLabel={`Chapter ${chapter.number}`}
+            loadChapter={() => chapterText(story.slug, chapter.id)}
+            active={active}
+            muted={muted}
+          />
         ) : (
           <VideoReel reel={reel} active={active} muted={muted} />
         )}

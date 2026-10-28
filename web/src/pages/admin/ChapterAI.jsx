@@ -11,8 +11,10 @@ import { useCachedAsync } from '../../lib/useAsync'
 
 /** A free reel script from the chapter's first lines: about 110 words, cut at a sentence end. */
 function openingScript(text, number, storyTitle) {
-  const words = text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean)
   const sentenceEnd = /[.!?…]["'”’)]*$/
+  // A heading line ("The Woman Who Came Back") becomes its own sentence instead of running into the next.
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
+  const words = lines.map((l) => (sentenceEnd.test(l) ? l : `${l}.`)).join(' ').split(/\s+/).filter(Boolean)
   let end = Math.min(words.length, 110)
   for (let i = end; i >= 60; i--) {
     if (sentenceEnd.test(words[i - 1] || '')) {
@@ -121,7 +123,7 @@ export function ChapterAI({ chapter, number, storyTitle, getText, onClose, befor
   const savedScript = reel?.kind === kind && reel?.script === script.trim()
 
   return (
-    <Modal open onClose={onClose} icon={Sparkles} title="Listen & reel" subtitle={`Chapter ${number}: ${chapter.title || 'Untitled'}`} size="max-w-2xl">
+    <Modal open onClose={onClose} icon={Sparkles} title="Listen & reel" subtitle={chapter.title && chapter.title !== `Chapter ${number}` ? `Chapter ${number}: ${chapter.title}` : `Chapter ${number}`} size="max-w-2xl">
       {!state ? (
         <div className="grid place-items-center py-10">
           <LoaderCircle className="h-6 w-6 animate-spin text-muted" />
@@ -259,6 +261,7 @@ export function ChapterAI({ chapter, number, storyTitle, getText, onClose, befor
                     color="#6a4ff0"
                     author={{ ...DEFAULT_ABOUT, ...about.data }}
                     title={storyTitle}
+                    chapterLabel={`Chapter ${number}`}
                     active={previewing}
                     muted={false}
                   />

@@ -1,119 +1,163 @@
-import { Play } from 'lucide-react'
+import { Lock, Play } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { photoSources } from '../lib/aboutIcons'
 import { canSpeak, speakWords } from '../lib/deviceVoice'
 
-const LINE_WORDS = 7
+const LINE_WORDS = 4
 const SILENT_PACE_MS = 60000 / 165 // captions move at speaking pace while the sound is off
+const split = (text) => text.trim().split(/\s+/).filter(Boolean)
 
 /**
- * The free reel: the author's photo drifting slowly over the story's colours, with the script as
- * big captions that light up word by word. With sound on, the viewer's device voice reads it.
- * `active` is true while the reel fills the screen.
+ * The free reel: the author's photo over the story's colours, with big captions that light up
+ * word by word. With sound on, the viewer's device voice reads it. After the short intro it keeps
+ * going and reads the whole chapter (`loadChapter` resolves to its text, or null when the viewer
+ * can't open that chapter yet). Everything is sized from the frame, so it looks the same in the
+ * small Studio preview and full screen. `active` is true while the reel fills the screen.
  */
-export function VoiceReel({ script, color, author, title, active, muted }) {
-  const words = useMemo(() => script.trim().split(/\s+/).filter(Boolean), [script])
-  const lines = useMemo(() => {
-    const out = []
-    for (let i = 0; i < words.length; i += LINE_WORDS) out.push(i)
-    return out
-  }, [words])
+export function VoiceReel({ script, color, author, title, chapterLabel, loadChapter, active, muted }) {
+  const intro = useMemo(() => split(script), [script])
+  const [chapterWords, setChapterWords] = useState(null)
+  const [phase, setPhase] = useState('intro') // intro → chapter → done | locked
   const [at, setAt] = useState(0)
   const [paused, setPaused] = useState(false)
-  const rerun = useRef(0)
-  const [run, setRun] = useState(0) // bumps to start again (loop)
+  const [run, setRun] = useState(0) // bumps to play the intro again (looping preview)
+  const runs = useRef(0)
+
+  const words = phase === 'chapter' ? chapterWords || [] : intro
+
+  // Swiped away: start over next time.
+  useEffect(() => {
+    if (active) return
+    setPhase('intro')
+    setAt(0)
+    setPaused(false)
+  }, [active])
 
   useEffect(() => {
-    if (!active || paused || !words.length) return
+    if (!active || paused || !words.length || phase === 'done' || phase === 'locked') return
     let stop
     let timer
-    const again = () => {
-      timer = setTimeout(() => setRun(++rerun.current), 1800) // short breath, then loop
+    let cancelled = false
+    const finished = async () => {
+      if (cancelled) return
+      if (phase === 'chapter') return setPhase('done')
+      if (!loadChapter) {
+        timer = setTimeout(() => setRun(++runs.current), 1800) // no chapter to continue with: loop the intro
+        return
+      }
+      const text = chapterWords ? chapterWords.join(' ') : await loadChapter().catch(() => null)
+      if (cancelled) return
+      if (!text?.trim()) return setPhase('locked')
+      setChapterWords(split(text))
+      setAt(0)
+      setPhase('chapter')
     }
     if (!muted && canSpeak()) {
-      stop = speakWords(words, { onWord: setAt, onEnd: again })
+      stop = speakWords(words, { onWord: setAt, onEnd: finished })
     } else {
       let i = 0
       setAt(0)
       timer = setInterval(() => {
         if (++i >= words.length) {
           clearInterval(timer)
-          again()
+          finished()
         } else setAt(i)
       }, SILENT_PACE_MS)
     }
     return () => {
+      cancelled = true
       stop?.()
       clearInterval(timer)
       clearTimeout(timer)
     }
-  }, [active, paused, muted, words, run])
-
-  useEffect(() => {
-    if (!active) {
-      setAt(0)
-      setPaused(false)
-    }
-  }, [active])
+  }, [active, paused, muted, phase, words, run]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const photo = photoSources(author?.photo_url)
-  const line = Math.floor(at / LINE_WORDS)
-  const shown = [lines[line], lines[line + 1]].filter((x) => x !== undefined)
+  const line = Math.floor(at / LINE_WORDS) * LINE_WORDS
+  const cq = (n) => `${n}cqw` // font sizes follow the frame's width
 
   return (
     <div
-      className="relative h-full w-full overflow-hidden"
-      style={{ background: `radial-gradient(120% 80% at 50% 25%, color-mix(in srgb, ${color} 75%, #fff 10%), color-mix(in srgb, ${color} 35%, #0b0716) 70%)` }}
+      className="relative h-full w-full overflow-hidden select-none [container-type:size]"
+      style={{ background: `radial-gradient(120% 80% at 50% 22%, color-mix(in srgb, ${color} 80%, #fff 8%), color-mix(in srgb, ${color} 30%, #0b0716) 72%)` }}
       onClick={() => setPaused((p) => !p)}
     >
-      <div className="pointer-events-none absolute -top-24 -left-20 h-72 w-72 rounded-full bg-white/15 blur-3xl" />
-      <div className="pointer-events-none absolute -right-16 bottom-40 h-64 w-64 rounded-full bg-black/25 blur-3xl" />
+      <div className="pointer-events-none absolute -top-[10%] -left-[15%] h-[35%] w-[70%] rounded-full bg-white/15 blur-3xl" />
 
-      <p className="absolute inset-x-6 top-16 text-center font-display text-2xl leading-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">{title}</p>
+      <p
+        className="absolute inset-x-[7%] top-[8%] line-clamp-2 text-center font-display leading-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]"
+        style={{ fontSize: cq(7.5) }}
+      >
+        {title}
+      </p>
 
       {photo.fallback && (
-        <div className="absolute inset-x-0 top-[22%] flex justify-center">
-          <div className="relative w-[58%] max-w-[240px] rounded-[2rem] bg-white p-1.5 shadow-2xl shadow-black/50 ring-4 ring-white/20">
-            <div className="overflow-hidden rounded-[1.6rem] bg-white">
+        <div className="absolute top-[21%] left-1/2 h-[32%] -translate-x-1/2">
+          <div className="h-full rounded-[12cqw] bg-white p-[1.2cqw] shadow-2xl shadow-black/50 ring-[1.5cqw] ring-white/20">
+            <div className="h-full overflow-hidden rounded-[10.5cqw] bg-white">
               <picture>
                 {photo.webp && <source srcSet={photo.webp} type="image/webp" />}
                 <img
                   src={photo.fallback}
                   alt={author?.name || ''}
-                  className={`block aspect-[798/1024] w-full object-contain ${active && !paused ? 'animate-[reel-drift_14s_ease-in-out_infinite_alternate]' : ''}`}
+                  className={`block aspect-[798/1024] h-full object-contain ${active && !paused ? 'animate-[reel-drift_14s_ease-in-out_infinite_alternate]' : ''}`}
                 />
               </picture>
             </div>
-            {author?.name && (
-              <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-xs whitespace-nowrap text-white backdrop-blur">
-                {author.name}
-              </span>
-            )}
           </div>
+          {author?.name && (
+            <span
+              className="absolute -bottom-[1.2em] left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-[0.9em] py-[0.3em] whitespace-nowrap text-white backdrop-blur"
+              style={{ fontSize: cq(3.6) }}
+            >
+              {author.name}
+            </span>
+          )}
         </div>
       )}
 
-      {/* captions */}
-      <div className="absolute inset-x-4 bottom-44 space-y-1 text-center">
-        {shown.map((start) => (
-          <p key={start} className="text-xl leading-snug font-semibold text-white/55 drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)]">
-            {words.slice(start, start + LINE_WORDS).map((w, k) => {
-              const i = start + k
-              return (
-                <span key={i} className={`transition-colors duration-150 ${i === at ? 'rounded bg-accent px-1 text-accent-ink' : i < at ? 'text-white' : ''}`}>
-                  {w}{' '}
-                </span>
-              )
-            })}
+      {/* what is being read */}
+      <div className="absolute inset-x-[5%] top-[57%] text-center">
+        <p className="mb-[1.5cqw] font-semibold tracking-wider text-white/70 uppercase" style={{ fontSize: cq(3.2) }}>
+          {phase === 'chapter' ? `${chapterLabel} · reading` : phase === 'intro' ? 'Intro' : chapterLabel}
+        </p>
+        {phase === 'chapter' && (
+          <div className="mx-auto mb-[2cqw] h-[0.8cqw] w-[60%] overflow-hidden rounded-full bg-white/20">
+            <div className="h-full bg-white/80" style={{ width: `${(at / Math.max(1, words.length)) * 100}%` }} />
+          </div>
+        )}
+        {(phase === 'intro' || phase === 'chapter') &&
+          [line, line + LINE_WORDS]
+            .filter((start) => start < words.length)
+            .map((start) => (
+              <p key={start} className="leading-snug font-semibold text-white/55 drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)]" style={{ fontSize: cq(5.6) }}>
+                {words.slice(start, start + LINE_WORDS).map((w, k) => {
+                  const i = start + k
+                  return (
+                    <span key={i} className={i === at ? 'rounded bg-accent px-[0.15em] text-accent-ink' : i < at ? 'text-white' : ''}>
+                      {w}{' '}
+                    </span>
+                  )
+                })}
+              </p>
+            ))}
+        {phase === 'locked' && (
+          <p className="flex items-center justify-center gap-[0.4em] font-semibold text-white" style={{ fontSize: cq(5) }}>
+            <Lock style={{ width: '1em', height: '1em' }} /> Unlock {chapterLabel} to keep listening
           </p>
-        ))}
+        )}
+        {phase === 'done' && (
+          <p className="font-semibold text-white" style={{ fontSize: cq(5) }}>
+            End of {chapterLabel}. Swipe up for the next one.
+          </p>
+        )}
       </div>
 
       {paused && (
         <span className="absolute inset-0 grid place-items-center bg-black/20">
-          <span className="grid h-16 w-16 place-items-center rounded-full bg-black/50 text-white backdrop-blur">
-            <Play className="h-7 w-7 fill-white" />
+          <span className="grid h-[18cqw] w-[18cqw] place-items-center rounded-full bg-black/50 text-white backdrop-blur">
+            <Play className="h-1/2 w-1/2 fill-white" />
           </span>
         </span>
       )}
