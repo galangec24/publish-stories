@@ -212,6 +212,9 @@ input[type='number'] {
 /* --- Protected content -------------------------------------------------- */
 body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 /* Readers: no selecting or long-press copy anywhere on the site; form fields still work. */
+/* The word being read aloud (NarrationPlayer). */
+::highlight(narration) { background-color: color-mix(in srgb, var(--accent) 45%, transparent); color: inherit; }
+
 body.no-copy { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 body.no-copy :where(input, textarea, select, [contenteditable='true']) { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 @media print { body.protected { display: none !important; } }

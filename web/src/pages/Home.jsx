@@ -1,4 +1,4 @@
-import { ArrowUpRight, BookOpen, Coffee, HeartHandshake, MessagesSquare, Newspaper, Sparkles, Tags, X } from 'lucide-react'
+import { ArrowUpRight, BookOpen, Clapperboard, Coffee, HeartHandshake, MessagesSquare, Newspaper, Sparkles, Tags, X } from 'lucide-react'
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
@@ -207,6 +207,12 @@ export function Home() {
                 <Icon className="h-4 w-4" /> {label}
               </button>
             ))}
+            <Link
+              to="/reels"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-muted transition hover:text-ink"
+            >
+              <Clapperboard className="h-4 w-4" /> Reels
+            </Link>
           </div>
           <SearchBox
             className="md:max-w-2xl md:flex-1"

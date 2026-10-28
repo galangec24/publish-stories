@@ -32,7 +32,11 @@ Set these in **Render → story-api → Environment**. Values are never committe
 | `BREVO_API_KEY`, `BREVO_SENDER_EMAIL` | for email | Verification and reset codes, access-code emails |
 | `GOOGLE_TRANSLATE_API_KEY` | optional | Page translator. Without it, MyMemory is used |
 | `GIPHY_API_KEY` | optional | GIF search in the chat. Create the key at developers.giphy.com with platform **Web** |
-| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | optional | Chat attachments in Supabase Storage (10 MB). Without them, attachments go in the database (3 MB) |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | optional | Chat attachments in Supabase Storage (10 MB). Without them, attachments go in the database (3 MB). **Required** for AI readings and reels (private bucket `ai-media`, created automatically) |
+| `ELEVENLABS_API_KEY` | optional | AI reading of chapters. elevenlabs.io → Profile → API keys. Billed per character read |
+| `ELEVENLABS_VOICE_ID` | optional | The voice for readings (ElevenLabs → Voices → copy the voice ID). Empty: the first voice on the account |
+| `HEYGEN_API_KEY` | optional | Chapter reels (presenter videos). app.heygen.com → Settings → API. Billed per video |
+| `ANTHROPIC_API_KEY` | optional | Claude drafts reel scripts. console.anthropic.com → API keys |
 | `PAYMONGO_SECRET_KEY`, `PAYMONGO_WEBHOOK_SECRET` | optional | Instant QR Ph checkout. Hidden from readers in test mode |
 | `ACCESS_MAX_DEVICES`, `ACCESS_NETWORK_DAYS` | optional | Device cap and network sharing window for purchases (5 and 30) |
 | `DB_CONN_MAX_AGE`, `JWT_ACCESS_MINUTES`, `JWT_REFRESH_DAYS`, `OTP_*` | optional | Tuning |

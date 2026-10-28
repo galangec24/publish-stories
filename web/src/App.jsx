@@ -11,6 +11,7 @@ import { Privacy, Terms } from './pages/Legal'
 import { Onboarding } from './pages/Onboarding'
 import { Profile } from './pages/Profile'
 import { Purchases } from './pages/Purchases'
+import { Reels } from './pages/Reels'
 import { Settings } from './pages/Settings'
 import { StoryPage } from './pages/StoryPage'
 import { applyWaitingUpdate } from './pwa/updates'
@@ -44,6 +45,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route index element={<Home />} />
         <Route path="stories/:slug" element={<StoryPage />} />
+        <Route path="reels" element={<Reels />} />
         <Route path="login" element={<Login />} />
         <Route path="register" element={<Register />} />
         <Route path="verify" element={<VerifyEmail />} />

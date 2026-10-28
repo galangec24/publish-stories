@@ -1,4 +1,4 @@
-import { Info, LayoutDashboard, SunMoon } from 'lucide-react'
+import { Clapperboard, Info, LayoutDashboard, SunMoon } from 'lucide-react'
 import { lazy, Suspense, useEffect } from 'react'
 import { Link, NavLink, Outlet, useLocation, useSearchParams } from 'react-router-dom'
 
@@ -62,6 +62,13 @@ export function Layout() {
               </span>
             </Link>
             <nav className="ml-auto flex items-center gap-1.5 sm:gap-2">
+              <NavLink
+                to="/reels"
+                title="Reels"
+                className={({ isActive }) => `flex items-center gap-1.5 px-2 text-sm hover:text-ink ${isActive ? 'font-semibold text-brand' : 'text-muted'}`}
+              >
+                <Clapperboard className="h-4 w-4" /> <span className="hidden sm:inline">Reels</span>
+              </NavLink>
               <Link to="/#about" className="hidden items-center gap-1.5 px-2 text-sm text-muted hover:text-ink md:flex">
                 <Info className="h-4 w-4" /> About
               </Link>

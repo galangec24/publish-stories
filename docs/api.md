@@ -40,6 +40,8 @@ Legend: 🌐 anyone · 👤 signed in · 🛡️ admin
 | `GET genres/`, `GET stats/`, `GET about/` | 🌐 | Reference data |
 | `GET media/images/<uuid>.webp` | 🌐 | Story pictures and QR images (cached forever) |
 | `GET translate/languages/`, `POST translate/` | 🌐 | Page translator |
+| `GET stories/<slug>/chapters/<id>/narration/` | 🌐 | AI reading: `segments` of `{url (signed, 3 h), duration, words: [[word, start, end]]}`. 403 for chapters the reader can't open |
+| `GET reels/?story=slug` | 🌐 | Published chapter reels with signed video links, story and chapter number |
 
 ## Paying
 
@@ -78,6 +80,11 @@ Legend: 🌐 anyone · 👤 signed in · 🛡️ admin
 | `admin/stories/<id>/chapters/deleted/`, `POST admin/chapters/<id>/restore/` | Recently deleted chapters (kept 30 days) and restoring one in place |
 | `admin/stories/import/`, `admin/stories/import-one/` | Bulk import, or one manuscript with `preview=true` first |
 | `admin/images/` | Upload a picture → URL |
+| `GET admin/chapters/<id>/ai/` | The chapter's AI reading and reel, and which services are set up |
+| `POST/DELETE admin/chapters/<id>/ai/narration/` | Make (in the background) or remove the AI reading |
+| `POST admin/chapters/<id>/ai/reel/script/` | Claude drafts a one-minute reel script |
+| `POST/PATCH/DELETE admin/chapters/<id>/ai/reel/` | `{script, avatar_id}` records the reel with HeyGen; `{published}` shows or hides it; DELETE removes it |
+| `GET admin/ai/presenters/` | HeyGen's ready-made presenters |
 | `admin/genres/`, `admin/columns/` | CRUD |
 | `admin/about/` | About page content |
 | `admin/comments/`, `admin/comments/<id>/hide\|unhide/` | Moderation |

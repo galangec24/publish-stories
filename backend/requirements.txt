@@ -16,3 +16,4 @@ channels>=4.2
 channels-redis>=4.2
 uvicorn[standard]>=0.30
 uvicorn-worker>=0.2
+anthropic>=2.3,<3

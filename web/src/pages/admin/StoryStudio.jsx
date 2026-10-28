@@ -46,6 +46,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { EmojiPanel } from '../../components/ChatExtras'
+import { ChapterAI } from './ChapterAI'
 import { Field, GenreChips, NumberStepper, Spinner, useToast } from '../../components/ui'
 import { api, ApiError } from '../../lib/api'
 import { wordCount } from '../../lib/delta'
@@ -86,6 +87,7 @@ export function StoryStudio() {
   const [saveState, setSaveState] = useState('saved') // saved | dirty | saving | error
   const [format, setFormat] = useState({})
   const [tab, setTab] = useState('home')
+  const [aiOpen, setAiOpen] = useState(false) // AI reading + reel for the open chapter
   const [navOpen, setNavOpen] = useState(() => window.innerWidth >= 900)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
@@ -559,13 +561,13 @@ export function StoryStudio() {
       {/* Ribbon */}
       <div className="border-b border-line bg-surface-2/60">
         <div className="flex gap-1 px-2 pt-1 text-sm">
-          {['home', 'insert', 'view', 'review'].map((t) => (
+          {['home', 'insert', 'view', 'review', 'ai'].map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`rounded-t-lg px-3 py-1.5 capitalize ${tab === t ? 'bg-surface font-semibold text-brand' : 'text-muted hover:text-ink'}`}
             >
-              {t}
+              {t === 'ai' ? 'AI' : t}
             </button>
           ))}
         </div>
@@ -705,6 +707,11 @@ export function StoryStudio() {
             <Group label="Proofing">
               <Big icon={Search} label="Find (Ctrl+F)" onClick={find} />
               <Big icon={Hash} label="Word count" onClick={showWordCount} />
+            </Group>
+          )}
+          {tab === 'ai' && (
+            <Group label="This chapter">
+              <Big icon={Sparkles} label="AI voice & reel" onClick={() => chapterIndex >= 0 && setAiOpen(true)} />
             </Group>
           )}
         </div>
@@ -940,6 +947,10 @@ export function StoryStudio() {
             <button className="btn-primary" onClick={() => resolveConflict(true)}>Keep mine</button>
           </div>
         </Modal>
+      )}
+
+      {aiOpen && chapterIndex >= 0 && (
+        <ChapterAI chapter={chapters[chapterIndex]} number={chapterIndex + 1} beforeRun={flush} onClose={() => setAiOpen(false)} />
       )}
 
       {dialog && <PromptModal {...dialog} onDone={(v) => { dialog.resolve(v); setDialog(null) }} />}

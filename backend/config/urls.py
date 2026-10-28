@@ -11,12 +11,14 @@ urlpatterns = [
     path("api/admin/", include("accounts.admin_urls")),
     path("api/admin/", include("payments.admin_urls")),
     path("api/admin/", include("audit.urls")),
+    path("api/admin/", include("ai_media.admin_urls")),
     path("api/", include("catalog.urls")),
     path("api/media/images/<uuid:pk>.webp", serve_image),
     path("api/", include("payments.urls")),
     path("api/", include("translations.urls")),
     path("api/", include("notifications.urls")),
     path("api/", include("support.urls")),
+    path("api/", include("ai_media.urls")),
 ]
 
 if settings.DEBUG:

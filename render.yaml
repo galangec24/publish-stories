@@ -68,6 +68,15 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_KEY
         sync: false
+      # AI reading and chapter reels (ai_media); each feature stays off until its key is set.
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_VOICE_ID
+        sync: false
+      - key: HEYGEN_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
       # Add later in the Environment tab when needed (not prompted on first deploy):
       #   GOOGLE_DESKTOP_CLIENT_ID / GOOGLE_DESKTOP_CLIENT_SECRET  (Windows app sign-in)
       #   GS_BUCKET_NAME + GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/gcs.json  (cover images in Firebase Storage)

@@ -1,0 +1,159 @@
+import { BookOpen, Captions, Clapperboard, Play, Volume2, VolumeX } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+
+import { Spinner } from '../components/ui'
+import { api } from '../lib/api'
+import { useAsync } from '../lib/useAsync'
+
+/** Reels: one short presenter video per chapter, swiped through one at a time. */
+export function Reels() {
+  const [params] = useSearchParams()
+  const story = params.get('story')
+  const reels = useAsync(() => api.get('reels/', story ? { story } : undefined), [story])
+  const [muted, setMuted] = useState(true) // browsers only autoplay silently; one tap turns sound on for every reel
+  const [captions, setCaptions] = useState(false)
+
+  if (reels.loading && !reels.data) return <Spinner className="min-h-[60vh] items-center" />
+  const list = reels.data || []
+
+  return (
+    <div className="-mx-4">
+      {story && list[0] && (
+        <p className="flex items-center justify-between gap-2 px-4 pt-3 text-sm">
+          <span className="truncate text-muted">
+            Reels from <b className="text-ink">{list[0].story.title}</b>
+          </span>
+          <Link to="/reels" className="shrink-0 font-semibold text-brand">All reels</Link>
+        </p>
+      )}
+      {!list.length ? (
+        <div className="grid min-h-[60vh] place-items-center px-6 text-center">
+          <div>
+            <Clapperboard className="mx-auto h-10 w-10 text-muted" />
+            <p className="mt-3 font-display text-2xl">No reels yet</p>
+            <p className="mt-1 text-muted">Short videos introducing each chapter will appear here.</p>
+            <Link to="/" className="btn-primary mt-5">Browse stories</Link>
+          </div>
+        </div>
+      ) : (
+        <div className="h-[calc(100dvh-4rem)] snap-y snap-mandatory overflow-y-auto overscroll-contain [scrollbar-width:none]">
+          {list.map((reel) => (
+            <Reel key={reel.id} reel={reel} muted={muted} onMute={setMuted} captions={captions} onCaptions={setCaptions} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Reel({ reel, muted, onMute, captions, onCaptions }) {
+  const box = useRef(null)
+  const video = useRef(null)
+  const [paused, setPaused] = useState(false)
+
+  // Plays while it fills most of the screen; stops (and rewinds) when swiped away.
+  useEffect(() => {
+    const el = box.current
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const v = video.current
+        if (!v) return
+        if (entry.isIntersecting) {
+          v.play().catch(() => setPaused(true))
+          setPaused(false)
+        } else {
+          v.pause()
+          v.currentTime = 0
+        }
+      },
+      { threshold: 0.65 },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  const togglePlay = () => {
+    const v = video.current
+    if (v.paused) {
+      v.play().catch(() => {})
+      setPaused(false)
+    } else {
+      v.pause()
+      setPaused(true)
+    }
+  }
+
+  const { story, chapter } = reel
+  return (
+    <section ref={box} className="flex h-full snap-start snap-always items-center justify-center px-2 py-3">
+      <div className="relative aspect-[9/16] h-full max-w-full overflow-hidden rounded-3xl bg-black shadow-2xl shadow-black/50">
+        <video
+          ref={video}
+          src={reel.video_url}
+          poster={reel.thumbnail_url || undefined}
+          muted={muted}
+          loop
+          playsInline
+          preload="metadata"
+          onClick={togglePlay}
+          className="h-full w-full object-cover"
+        />
+        {paused && (
+          <button onClick={togglePlay} className="absolute inset-0 grid place-items-center bg-black/20" aria-label="Play">
+            <span className="grid h-16 w-16 place-items-center rounded-full bg-black/50 text-white backdrop-blur">
+              <Play className="h-7 w-7 fill-white" />
+            </span>
+          </button>
+        )}
+
+        {/* side buttons */}
+        <div className="absolute top-3 right-3 flex flex-col gap-2">
+          <button
+            onClick={() => onMute(!muted)}
+            className="grid h-10 w-10 place-items-center rounded-full bg-black/45 text-white backdrop-blur"
+            aria-label={muted ? 'Turn sound on' : 'Mute'}
+          >
+            {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+          </button>
+          <button
+            onClick={() => onCaptions(!captions)}
+            className={`grid h-10 w-10 place-items-center rounded-full backdrop-blur ${captions ? 'bg-white text-black' : 'bg-black/45 text-white'}`}
+            aria-label="Show what is said"
+          >
+            <Captions className="h-5 w-5" />
+          </button>
+        </div>
+        {muted && (
+          <button
+            onClick={() => onMute(false)}
+            className="absolute top-4 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-xs font-semibold text-white backdrop-blur"
+          >
+            Tap for sound
+          </button>
+        )}
+
+        {/* story + chapter */}
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/55 to-transparent p-4 pt-16 text-white">
+          {captions && reel.script && (
+            <p className="mb-3 max-h-40 overflow-y-auto rounded-xl bg-black/50 p-3 text-sm leading-relaxed">{reel.script}</p>
+          )}
+          <Link to={`/stories/${story.slug}`} className="font-display text-xl leading-tight drop-shadow hover:underline">
+            {story.title}
+          </Link>
+          <p className="mt-0.5 text-sm text-white/80">
+            Chapter {chapter.number}
+            {chapter.title ? ` · ${chapter.title}` : ''}
+            {story.author_name ? ` · ${story.author_name}` : ''}
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <Link to={`/stories/${story.slug}?chapter=${chapter.id}`} className="btn-primary !py-2 text-sm">
+              <BookOpen className="h-4 w-4" /> Read chapter {chapter.number}
+            </Link>
+            {story.free && <span className="rounded-full bg-emerald-500/90 px-2.5 py-1 text-xs font-semibold">Free to read</span>}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}

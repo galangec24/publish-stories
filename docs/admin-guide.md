@@ -29,6 +29,12 @@ This guide covers everyday tasks on **Publish Stories**. Sign in at https://publ
 - **Story settings** cover title, synopsis, cover picture, genres, column, price, free chapters and reading fonts.
 - **Publish** asks for the price one last time. You can change the price until the first reader pays; after that it is locked.
 
+### AI voice and chapter reels
+Open a chapter, go to the **AI** tab in the ribbon and press **AI voice & reel**.
+- **AI reading:** press **Make reading**. A natural English voice reads the saved chapter word for word; readers see **Listen to this chapter** and each word lights up as it is read. Locked chapters stay locked. If you edit the chapter later, the reading shows **Out of date**: press **Remake reading**.
+- **Chapter reel:** pick a presenter, press **Write with AI** for a one-minute script (edit it as you like), then **Make video**. Recording takes a few minutes; you can close the window. When it's ready, tick **Show in the Reels tab**.
+- Each reading and each video costs credits on ElevenLabs or HeyGen, so make them for the chapters you want to promote.
+
 ### Upload many manuscripts at once
 Go to **Bulk import**, drop the files in, set the shared genre, price and free chapters, and choose whether to publish straight away.
 

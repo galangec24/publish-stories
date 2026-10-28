@@ -125,6 +125,13 @@ class StoryDetailView(APIView):
             latest = mine.select_related("story", "method").order_by("-created_at").first()
             purchase = PurchaseSerializer(latest).data if latest else None
         data.update(chapters=chapters, locked=locked, has_access=full_access, purchase=purchase, **reading_position(request, story))
+        # Which chapters the AI voice can read, and how many chapter reels the story has.
+        from ai_media.models import ChapterNarration, ChapterReel
+
+        narrated = set(ChapterNarration.objects.filter(chapter__story=story, status="ready").values_list("chapter_id", flat=True))
+        for chapter in chapters:
+            chapter["narrated"] = chapter["id"] in narrated
+        data["reel_count"] = ChapterReel.objects.filter(chapter__story=story, published=True, status="ready").count()
         return Response(data)
 
 

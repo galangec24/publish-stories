@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "notifications",
     "support",
     "audit",
+    "ai_media",
 ]
 
 MIDDLEWARE = [
@@ -242,6 +243,13 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 CHAT_FILE_MAX_BYTES = 10 * 1024 * 1024
 CHAT_FILE_DB_MAX_BYTES = 3 * 1024 * 1024
+
+# AI reading and chapter reels (ai_media). Each one is off until its key is set in Render;
+# the audio and videos are kept in the Supabase Storage bucket above (SUPABASE_*).
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "")  # empty: the first voice on the account
+HEYGEN_API_KEY = os.environ.get("HEYGEN_API_KEY", "")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 # Paid stories read without an account (see payments/access.py).
 ACCESS_MAX_DEVICES = int(os.environ.get("ACCESS_MAX_DEVICES", "5"))

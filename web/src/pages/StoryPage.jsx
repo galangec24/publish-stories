@@ -1,10 +1,11 @@
-import { BookOpen, Check, ChevronLeft, ChevronRight, ExternalLink, Eye, History, Lock, MessageCircle, ScrollText, UsersRound } from 'lucide-react'
+import { BookOpen, Check, ChevronLeft, ChevronRight, Clapperboard, ExternalLink, Eye, History, Lock, MessageCircle, ScrollText, UsersRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { BookReader } from '../components/BookReader'
 import { ProtectedContent } from '../components/ProtectedContent'
 import { JumpMenu } from '../components/JumpMenu'
+import { NarrationPlayer } from '../components/NarrationPlayer'
 import { QrPaywall } from '../components/QrPaywall'
 import { StoryRating } from '../components/StoryRating'
 import { ThemePicker } from '../components/ThemePicker'
@@ -32,6 +33,7 @@ export function StoryPage() {
   const [rating, setRating] = useState(null)
   const updateSocial = (patch) => setSocial((x) => ({ ...x, ...patch }))
   const top = useRef()
+  const textRef = useRef(null) // the chapter text, for the word-by-word highlight while listening
 
   // Count this visit (once per reader per day, server-side) and show live totals.
   useEffect(() => {
@@ -80,6 +82,11 @@ export function StoryPage() {
     const data = story.data
     if (!data || resumedFor.current === slug) return
     resumedFor.current = slug
+    const asked = data.chapters.findIndex((c) => String(c.id) === params.get('chapter'))
+    if (asked >= 0) {
+      setIndex(asked)
+      return
+    }
     let saved = null
     try {
       saved = JSON.parse(localStorage.getItem(posKey) || 'null')
@@ -229,7 +236,11 @@ export function StoryPage() {
         Chapter {index + 1} of {s.chapters.length}
       </p>
       <h2 className="mt-2 mb-8 text-3xl text-page-ink" style={{ fontFamily: titleStack(s.title_font) }}>{chapter?.title}</h2>
-      {chapter?.content && <DeltaView ops={chapter.content} fontFamily={fontStack(s.font_family)} fontSize={s.font_size} />}
+      {chapter?.content && (
+        <div ref={textRef}>
+          <DeltaView ops={chapter.content} fontFamily={fontStack(s.font_family)} fontSize={s.font_size} />
+        </div>
+      )}
       {showPaywall && (
         <p className="mt-6 flex items-center gap-2 text-sm text-muted">
           <Lock className="h-4 w-4" /> This chapter is locked. Scan the QR below the page to keep reading.
@@ -273,6 +284,11 @@ export function StoryPage() {
           </div>
           <StoryRating slug={s.slug} state={rating} onChange={setRating} />
           {s.synopsis && <p className="mt-4 text-sm text-muted">{s.synopsis}</p>}
+          {s.reel_count > 0 && (
+            <Link to={`/reels?story=${s.slug}`} className="btn-ghost mt-3 w-full !py-2 text-sm">
+              <Clapperboard className="h-4 w-4 text-brand" /> Watch chapter reels ({s.reel_count})
+            </Link>
+          )}
           <p className="mt-3 text-xs text-muted">
             {s.word_count.toLocaleString()} words · {s.chapters.length} chapters ·{' '}
             {s.is_free ? 'Free' : s.has_access ? 'Unlocked' : `₱${Number(s.price).toFixed(2)}`}
@@ -378,6 +394,7 @@ export function StoryPage() {
             })),
           ])}
         />
+        <NarrationPlayer slug={s.slug} chapter={chapter} textRef={textRef} follow={mode === 'scroll'} />
         <ProtectedContent>
           {mode === 'book' ? (
             <div className="rounded-3xl border border-line bg-page px-6 py-8 shadow-2xl shadow-black/20 sm:px-12 sm:py-10">
