@@ -5,18 +5,32 @@ export const canSpeak = () => typeof window !== 'undefined' && 'speechSynthesis'
 
 const PREFERRED = /natural|neural|online|siri|samantha|ava|allison|aria|jenny|google us english|google uk english/i
 
-/** The device's English voices, most natural-sounding first. */
-export function englishVoices() {
-  const voices = window.speechSynthesis.getVoices()
-  const english = voices.filter((v) => /^en([-_]|$)/i.test(v.lang))
-  const score = (v) => (PREFERRED.test(v.name) ? 4 : 0) + (/en[-_](us|gb|ph|au)/i.test(v.lang) ? 1 : 0) + (v.default ? 1 : 0)
-  return english.sort((a, b) => score(b) - score(a))
+// Voice language tags for the site's language codes (Filipino voices are tagged fil-PH or tl-PH).
+const VOICE_CODES = { fil: ['fil', 'tl'], tl: ['fil', 'tl'] }
+
+/** The language the page is shown in (the translator sets it), e.g. "en", "fil", "ceb". */
+export const pageLanguage = () => (document.documentElement.lang || 'en').toLowerCase().split('-')[0]
+
+/** The device's voices for a language, most natural-sounding first. */
+export function voicesFor(language = pageLanguage()) {
+  const codes = VOICE_CODES[language] || [language]
+  const matching = window.speechSynthesis
+    .getVoices()
+    .filter((v) => codes.some((code) => new RegExp(`^${code}([-_]|$)`, 'i').test(v.lang)))
+  const score = (v) => (PREFERRED.test(v.name) ? 4 : 0) + (/[-_](us|gb|ph|au)$/i.test(v.lang) ? 1 : 0) + (v.default ? 1 : 0)
+  return matching.sort((a, b) => score(b) - score(a))
 }
 
-/** The voice the reader picked (by its id), or else the most natural-sounding English one. */
-export function englishVoice(voiceURI) {
-  const voices = englishVoices()
-  return voices.find((v) => v.voiceURI === voiceURI) || voices[0] || null
+export const englishVoices = () => voicesFor('en')
+
+/**
+ * The voice to read with: the reader's pick (by id) if it speaks the language, else the most
+ * natural one for the language, else English (a device without, say, a Bisaya voice).
+ */
+export function readingVoice(voiceURI, language = pageLanguage()) {
+  const voices = voicesFor(language)
+  const pool = voices.length ? voices : englishVoices()
+  return pool.find((v) => v.voiceURI === voiceURI) || pool[0] || null
 }
 
 /**
@@ -48,9 +62,9 @@ const WORDS_PER_MINUTE = 165
  * word events (some Android voices) it is estimated from the speaking pace.
  * Returns a function that stops reading.
  */
-export function speakWords(words, { from = 0, rate = 1, volume = 1, voiceURI, onWord, onEnd }) {
+export function speakWords(words, { from = 0, rate = 1, volume = 1, voiceURI, language = pageLanguage(), onWord, onEnd }) {
   const synth = window.speechSynthesis
-  const voice = englishVoice(voiceURI)
+  const voice = readingVoice(voiceURI, language)
   let stopped = false
   let i = from
 
@@ -69,7 +83,7 @@ export function speakWords(words, { from = 0, rate = 1, volume = 1, voiceURI, on
     }
     const utterance = new SpeechSynthesisUtterance(words.slice(first, i).join(' '))
     if (voice) utterance.voice = voice
-    utterance.lang = voice?.lang || 'en-US'
+    utterance.lang = voice?.lang || language
     utterance.rate = rate
     utterance.volume = volume
 

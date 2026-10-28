@@ -212,6 +212,9 @@ input[type='number'] {
 /* --- Protected content -------------------------------------------------- */
 body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 /* Readers: no selecting or long-press copy anywhere on the site; form fields still work. */
+/* Section headings land below the sticky header and the Listen player. */
+[id^='sec-'] { scroll-margin-top: 10rem; }
+
 /* The word being read aloud (NarrationPlayer). */
 ::highlight(narration) { background-color: color-mix(in srgb, var(--accent) 45%, transparent); color: inherit; }
 

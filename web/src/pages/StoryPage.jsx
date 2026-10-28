@@ -33,6 +33,7 @@ export function StoryPage() {
   const [rating, setRating] = useState(null)
   const updateSocial = (patch) => setSocial((x) => ({ ...x, ...patch }))
   const top = useRef()
+  const chapterTop = useRef(null) // the chapter itself (on phones the story card is above it)
   const textRef = useRef(null) // the chapter text, for the word-by-word highlight while listening
   const bookControl = useRef(null) // lets Listen turn the book to the page being read
 
@@ -228,7 +229,8 @@ export function StoryPage() {
     setIndex(i)
     setFromEnd(atEnd)
     setTocOpen(false)
-    if (mode === 'scroll') top.current?.scrollIntoView({ behavior: 'smooth' })
+    // Show the chapter that was picked (both views), once it has been drawn.
+    setTimeout(() => chapterTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
   }
 
   const chapterBody = (
@@ -374,7 +376,7 @@ export function StoryPage() {
         </div>
       </aside>
 
-      <article className="min-w-0">
+      <article ref={chapterTop} className="min-w-0 scroll-mt-20">
         <JumpMenu
           label={chapter?.title || 'Chapters'}
           items={s.chapters.flatMap((c, i) => [

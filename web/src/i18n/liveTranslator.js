@@ -188,6 +188,26 @@ export function setLanguage(target) {
   }
 }
 
+/** The language the page is shown in ("en" means the original text). */
+export const currentLanguage = () => lang
+
+/**
+ * Translate some texts into the page's language (cached like the page's own text). Used for text
+ * that isn't on the page as it is, e.g. a reel's script and chapter while they are read aloud.
+ */
+export async function translateTexts(texts) {
+  const target = lang
+  if (target === 'en') return texts
+  const missing = [...new Set(texts.filter((t) => HAS_LETTERS.test(t) && !memory.has(`${target}\u0000${t}`)))]
+  for (let i = 0; i < missing.length; i += BATCH) {
+    const chunk = missing.slice(i, i + BATCH)
+    const { translations } = await api.post('translate/', { target, texts: chunk })
+    chunk.forEach((src, k) => memory.set(`${target}\u0000${src}`, translations[k]))
+  }
+  if (missing.length) saveCache(target)
+  return texts.map((t) => memory.get(`${target}\u0000${t}`) ?? t)
+}
+
 export function onTranslatorStatus(fn) {
   listeners.add(fn)
   return () => listeners.delete(fn)

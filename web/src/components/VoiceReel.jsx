@@ -1,12 +1,23 @@
 import { Lock, Play } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { photoSources } from '../lib/aboutIcons'
-import { canSpeak, speakWords } from '../lib/deviceVoice'
+import { canSpeak, speakingSeconds, speakWords } from '../lib/deviceVoice'
+import { translateTexts } from '../i18n/liveTranslator'
+import { SeekBar } from './SeekBar'
 
 const LINE_WORDS = 4
 const SILENT_PACE_MS = 60000 / 165 // captions move at speaking pace while the sound is off
 const split = (text) => text.trim().split(/\s+/).filter(Boolean)
+const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+const SENTENCE_END = /[.!?…]["'”’)]*$/
+
+/** The text in the page's language (the translator's choice), paragraph by paragraph. */
+async function inPageLanguage(text) {
+  const paragraphs = text.split('\n')
+  const translated = await translateTexts(paragraphs).catch(() => paragraphs)
+  return translated.join('\n')
+}
 
 /**
  * The free reel: the author's photo over the story's colours, with big captions that light up
@@ -16,8 +27,19 @@ const split = (text) => text.trim().split(/\s+/).filter(Boolean)
  * small Studio preview and full screen. `active` is true while the reel fills the screen.
  */
 export function VoiceReel({ script, color, author, title, chapterLabel, loadChapter, active, muted }) {
-  const intro = useMemo(() => split(script), [script])
+  const [intro, setIntro] = useState(() => split(script))
   const [chapterWords, setChapterWords] = useState(null)
+  const from = useRef(0) // where the next reading starts (a seek)
+
+  // Read in the page's language: the script is translated when the page is.
+  useEffect(() => {
+    let current = true
+    setIntro(split(script))
+    inPageLanguage(script).then((text) => current && setIntro(split(text)))
+    return () => {
+      current = false
+    }
+  }, [script])
   const [phase, setPhase] = useState('intro') // intro → chapter → done | locked
   const [at, setAt] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -30,6 +52,7 @@ export function VoiceReel({ script, color, author, title, chapterLabel, loadChap
   useEffect(() => {
     if (active) return
     setPhase('intro')
+    from.current = 0
     setAt(0)
     setPaused(false)
   }, [active])
@@ -46,18 +69,22 @@ export function VoiceReel({ script, color, author, title, chapterLabel, loadChap
         timer = setTimeout(() => setRun(++runs.current), 1800) // no chapter to continue with: loop the intro
         return
       }
-      const text = chapterWords ? chapterWords.join(' ') : await loadChapter().catch(() => null)
+      let text = chapterWords ? chapterWords.join(' ') : await loadChapter().catch(() => null)
+      if (text?.trim() && !chapterWords) text = await inPageLanguage(text)
       if (cancelled) return
       if (!text?.trim()) return setPhase('locked')
       setChapterWords(split(text))
+      from.current = 0
       setAt(0)
       setPhase('chapter')
     }
+    const start = Math.min(from.current, words.length - 1)
+    from.current = 0
     if (!muted && canSpeak()) {
-      stop = speakWords(words, { onWord: setAt, onEnd: finished })
+      stop = speakWords(words, { from: start, onWord: setAt, onEnd: finished })
     } else {
-      let i = 0
-      setAt(0)
+      let i = start
+      setAt(start)
       timer = setInterval(() => {
         if (++i >= words.length) {
           clearInterval(timer)
@@ -72,6 +99,21 @@ export function VoiceReel({ script, color, author, title, chapterLabel, loadChap
       clearTimeout(timer)
     }
   }, [active, paused, muted, phase, words, run]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Jump to a spot (start of that sentence) and read on from there.
+  const indexAt = (fraction) => Math.min(words.length - 1, Math.max(0, Math.floor(fraction * words.length)))
+  const seek = (fraction) => {
+    let i = indexAt(fraction)
+    for (let k = 0; k < 40 && i > 0 && !SENTENCE_END.test(words[i - 1]); k++) i--
+    from.current = i
+    setAt(i)
+    setPaused(false)
+    setRun(++runs.current)
+  }
+  const describe = (fraction) => {
+    const i = indexAt(fraction)
+    return { time: clock(speakingSeconds(i)), text: words.slice(i, i + 6).join(' ') }
+  }
 
   const photo = photoSources(author?.photo_url)
   const line = Math.floor(at / LINE_WORDS) * LINE_WORDS
@@ -122,16 +164,14 @@ export function VoiceReel({ script, color, author, title, chapterLabel, loadChap
         <p className="mb-[1.5cqw] font-semibold tracking-wider text-white/70 uppercase" style={{ fontSize: cq(3.2) }}>
           {phase === 'chapter' ? `${chapterLabel} · reading` : phase === 'intro' ? 'Intro' : chapterLabel}
         </p>
-        {phase === 'chapter' && (
-          <div className="mx-auto mb-[2cqw] h-[0.8cqw] w-[60%] overflow-hidden rounded-full bg-white/20">
-            <div className="h-full bg-white/80" style={{ width: `${(at / Math.max(1, words.length)) * 100}%` }} />
-          </div>
+        {(phase === 'intro' || phase === 'chapter') && words.length > 0 && (
+          <SeekBar dark className="mx-auto mb-[1cqw] w-[78%]" progress={at / Math.max(1, words.length)} onSeek={seek} describe={describe} />
         )}
         {(phase === 'intro' || phase === 'chapter') &&
           [line, line + LINE_WORDS]
             .filter((start) => start < words.length)
             .map((start) => (
-              <p key={start} className="leading-snug font-semibold text-white/55 drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)]" style={{ fontSize: cq(5.6) }}>
+              <p key={start} translate="no" className="notranslate leading-snug font-semibold text-white/55 drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)]" style={{ fontSize: cq(5.6) }}>
                 {words.slice(start, start + LINE_WORDS).map((w, k) => {
                   const i = start + k
                   return (

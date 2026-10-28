@@ -2,12 +2,22 @@ import { Headphones, LoaderCircle, Pause, Play, SlidersHorizontal, Volume2, Volu
 import { useEffect, useRef, useState } from 'react'
 
 import { api } from '../lib/api'
-import { canSpeak, englishVoices, speakingSeconds, speakWords, unlockSpeech, voicesReady } from '../lib/deviceVoice'
+import { canSpeak, englishVoices, pageLanguage, speakingSeconds, speakWords, unlockSpeech, voicesFor, voicesReady } from '../lib/deviceVoice'
+import { SeekBar } from './SeekBar'
 import { useToast } from './ui'
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
 const BLOCKS = 'p,h1,h2,h3,h4,li,blockquote,pre,figure'
 const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+/** Index of the last word of piece `si` that starts by `t` seconds (-1 if none). */
+function lastWordBefore(words, si, t) {
+  let found = -1
+  words.forEach((w, k) => {
+    if (w.si === si && w.start <= t) found = k
+  })
+  return found
+}
+
 const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 const highlights = () => typeof CSS !== 'undefined' && CSS.highlights && typeof Highlight === 'function'
 
@@ -182,7 +192,8 @@ function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
         voiceURI: options.voiceURI,
         onWord: (i) => {
           setAt(i)
-          if (textRef.current && !textRef.current.contains(words.current[i]?.range.startContainer)) {
+          const word = words.current[i]
+          if (textRef.current && (!textRef.current.contains(word?.range.startContainer) || word.range.toString() !== word.text)) {
             words.current = screenWords(textRef.current)
           }
           mark.show(words.current[i])
@@ -200,11 +211,34 @@ function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
     setPlaying(false)
   }
 
+  const language = pageLanguage()
   useEffect(() => {
-    voicesReady().then(() => setVoices(englishVoices()))
+    voicesReady().then(() => setVoices(voicesFor(language).length ? voicesFor(language) : englishVoices()))
     play(0)
     return () => stop.current?.()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const total = words.current.length || chapter.word_count || 1
+  const indexAt = (fraction) => {
+    let i = Math.min(total - 1, Math.max(0, Math.floor(fraction * total)))
+    // start at the beginning of that sentence, so the reading makes sense
+    for (let k = 0; k < 40 && i > 0 && !/[.!?…]["'”’)]*$/.test(words.current[i - 1]?.text || ''); k++) i--
+    return i
+  }
+  const seek = (fraction) => {
+    if (!words.current.length && textRef.current) words.current = screenWords(textRef.current)
+    const i = indexAt(fraction)
+    setAt(i)
+    mark.show(words.current[i])
+    if (playing) play(i)
+  }
+  const describe = (fraction) => {
+    const i = Math.min(total - 1, Math.max(0, Math.floor(fraction * total)))
+    return {
+      time: clock(speakingSeconds(i, settings.speed)),
+      text: words.current.slice(i, i + 6).map((w) => w.text).join(' '),
+    }
+  }
 
   // A new speed, volume or voice applies from the current word (once the slider settles).
   const restart = useRef(null)
@@ -215,7 +249,7 @@ function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
     restart.current = setTimeout(() => play(at, { ...settings, ...patch }), 300)
   }
 
-  const total = words.current.length || chapter.word_count || 1
+  const noVoice = language !== 'en' && voices.length > 0 && !voicesFor(language).length
   return (
     <Bar
       title={chapter.title}
@@ -226,6 +260,9 @@ function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
         play()
       }}
       progress={at / total}
+      onSeek={seek}
+      describe={describe}
+      note={noVoice ? 'This device has no voice for this language, so an English voice reads it.' : ''}
       time={`${clock(speakingSeconds(at, settings.speed))} / ${clock(speakingSeconds(total, settings.speed))}`}
       settings={settings}
       onChange={change}
@@ -316,6 +353,36 @@ function RecordedPlayer({ slug, chapter, textRef, follow, book, onClose }) {
     return () => cancelAnimationFrame(frame)
   }, [playing, data]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const seekTime = (t) => {
+    if (!data) return
+    let si = 0
+    while (si + 1 < data.starts.length && data.starts[si + 1] <= t) si++
+    const offset = t - data.starts[si]
+    const a = audio.current
+    const resume = !a.paused
+    lastWord.current = -1
+    if (si !== seg.current) {
+      seg.current = si
+      a.src = data.segments[si].url
+      apply(a, settings)
+      a.addEventListener('loadedmetadata', () => (a.currentTime = offset), { once: true })
+    } else a.currentTime = offset
+    setTime(t)
+    // show where it lands even while paused
+    const k = lastWordBefore(data.words, si, offset)
+    if (k >= 0 && textRef.current) {
+      const onScreen = screenWords(textRef.current)
+      mark.show(onScreen[matchWords(data.words.map((w) => w.text), onScreen)[k]])
+    }
+    if (resume) a.play().catch(() => {})
+  }
+  const wordAtTime = (t) => {
+    let si = 0
+    while (data && si + 1 < data.starts.length && data.starts[si + 1] <= t) si++
+    const k = data ? lastWordBefore(data.words, si, t - data.starts[si]) : -1
+    return data && k >= 0 ? data.words.slice(k, k + 6).map((w) => w.text).join(' ') : ''
+  }
+
   function onEnded() {
     const next = seg.current + 1
     if (data && next < data.segments.length) {
@@ -342,6 +409,8 @@ function RecordedPlayer({ slug, chapter, textRef, follow, book, onClose }) {
         playing={playing}
         onToggle={() => (playing ? audio.current.pause() : audio.current.play())}
         progress={data?.total ? time / data.total : 0}
+        onSeek={(fraction) => seekTime(fraction * (data?.total || 0))}
+        describe={(fraction) => ({ time: clock(fraction * (data?.total || 0)), text: wordAtTime(fraction * (data?.total || 0)) })}
         time={`${clock(time)} / ${clock(data?.total || 0)}`}
         settings={settings}
         onChange={(patch) => {
@@ -363,7 +432,7 @@ function RecordedPlayer({ slug, chapter, textRef, follow, book, onClose }) {
  * never covers the text or the page controls. Settings: speed, volume and, for the device voice,
  * which voice reads.
  */
-function Bar({ title, loading, playing, onToggle, progress, time, settings, onChange, voices, onClose }) {
+function Bar({ title, loading, playing, onToggle, progress, onSeek, describe, note, time, settings, onChange, voices, onClose }) {
   const [open, setOpen] = useState(false)
   const panel = useRef(null)
 
@@ -388,12 +457,11 @@ function Bar({ title, loading, playing, onToggle, progress, time, settings, onCh
         </button>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{title || 'This chapter'}</p>
-          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line">
-            <div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${Math.min(100, progress * 100)}%` }} />
-          </div>
+          <SeekBar progress={progress} onSeek={onSeek} describe={describe} />
           <p className="mt-0.5 truncate text-[11px] text-muted">
             {time} · {settings.speed}× · {muted ? 'muted' : `volume ${Math.round(settings.volume * 100)}%`}
           </p>
+          {note && <p className="truncate text-[11px] text-amber-500">{note}</p>}
         </div>
         <button
           className="inline-flex items-center gap-1.5 rounded-xl border border-line px-2.5 py-2 text-sm font-medium text-muted hover:text-ink"
