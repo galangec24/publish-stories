@@ -1,11 +1,11 @@
-import { Headphones, LoaderCircle, Pause, Play, X } from 'lucide-react'
+import { Headphones, LoaderCircle, Pause, Play, SlidersHorizontal, Volume2, VolumeX, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { api } from '../lib/api'
-import { canSpeak, speakingSeconds, speakWords, unlockSpeech, voicesReady } from '../lib/deviceVoice'
+import { canSpeak, englishVoices, speakingSeconds, speakWords, unlockSpeech, voicesReady } from '../lib/deviceVoice'
 import { useToast } from './ui'
 
-const SPEEDS = [1, 1.25, 1.5, 0.75]
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
 const BLOCKS = 'p,h1,h2,h3,h4,li,blockquote,pre,figure'
 const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
 const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
@@ -91,8 +91,9 @@ function useWordMark(follow, book) {
       if (follow && Date.now() - userScrolledAt.current > FOLLOW_PAUSE_MS) {
         const r = word.range.getBoundingClientRect()
         const h = window.innerHeight
-        if (r.height && (r.top < h * 0.15 || r.bottom > h * 0.65)) {
-          window.scrollBy({ top: r.top - h * 0.33, behavior: 'smooth' })
+        const below = 160 // the header and the pinned player above the text
+        if (r.height && (r.top < Math.max(h * 0.15, below) || r.bottom > h * 0.7)) {
+          window.scrollBy({ top: r.top - Math.max(h * 0.33, below + 40), behavior: 'smooth' })
         }
       }
     },
@@ -131,16 +132,41 @@ export function NarrationPlayer({ slug, chapter, textRef, follow, book }) {
   return premium ? <RecordedPlayer key={chapter.id} {...props} /> : <DevicePlayer key={chapter.id} {...props} />
 }
 
+const SETTINGS_KEY = 'listen-settings'
+
+/** Speed, volume and voice, remembered on this device. */
+function useListenSettings() {
+  const [settings, setSettings] = useState(() => {
+    try {
+      return { speed: 1, volume: 1, voiceURI: '', ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }
+    } catch {
+      return { speed: 1, volume: 1, voiceURI: '' }
+    }
+  })
+  const update = (patch) =>
+    setSettings((current) => {
+      const next = { ...current, ...patch }
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(next))
+      } catch {
+        /* not remembered */
+      }
+      return next
+    })
+  return [settings, update]
+}
+
 /** Free: the device voice reads the words straight from the page. */
 function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
   const mark = useWordMark(follow, book)
+  const [settings, setSettings] = useListenSettings()
+  const [voices, setVoices] = useState([])
   const [playing, setPlaying] = useState(false)
-  const [speed, setSpeed] = useState(1)
   const [at, setAt] = useState(0)
   const words = useRef([])
   const stop = useRef(null)
 
-  const play = async (from = at, rate = speed) => {
+  const play = async (from = at, options = settings) => {
     if (!textRef.current) return
     words.current = screenWords(textRef.current)
     if (!words.current.length) return
@@ -151,7 +177,9 @@ function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
       words.current.map((w) => w.text),
       {
         from: from >= words.current.length ? 0 : from,
-        rate,
+        rate: options.speed,
+        volume: options.volume,
+        voiceURI: options.voiceURI,
         onWord: (i) => {
           setAt(i)
           if (textRef.current && !textRef.current.contains(words.current[i]?.range.startContainer)) {
@@ -173,9 +201,19 @@ function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
   }
 
   useEffect(() => {
+    voicesReady().then(() => setVoices(englishVoices()))
     play(0)
     return () => stop.current?.()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A new speed, volume or voice applies from the current word (once the slider settles).
+  const restart = useRef(null)
+  const change = (patch) => {
+    setSettings(patch)
+    if (!playing) return
+    clearTimeout(restart.current)
+    restart.current = setTimeout(() => play(at, { ...settings, ...patch }), 300)
+  }
 
   const total = words.current.length || chapter.word_count || 1
   return (
@@ -188,14 +226,10 @@ function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
         play()
       }}
       progress={at / total}
-      time={`${clock(speakingSeconds(at, speed))} / ${clock(speakingSeconds(total, speed))}`}
-      hint="Your device voice"
-      speed={speed}
-      onSpeed={() => {
-        const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]
-        setSpeed(next)
-        if (playing) play(at, next)
-      }}
+      time={`${clock(speakingSeconds(at, settings.speed))} / ${clock(speakingSeconds(total, settings.speed))}`}
+      settings={settings}
+      onChange={change}
+      voices={voices}
       onClose={() => {
         pause()
         mark.clear()
@@ -209,14 +243,19 @@ function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
 function RecordedPlayer({ slug, chapter, textRef, follow, book, onClose }) {
   const toast = useToast()
   const mark = useWordMark(follow, book)
+  const [settings, setSettings] = useListenSettings()
   const audio = useRef(null)
   const [data, setData] = useState(null) // { segments, words, starts, total }
   const [playing, setPlaying] = useState(false)
-  const [speed, setSpeed] = useState(1)
   const [time, setTime] = useState(0)
   const seg = useRef(0)
   const match = useRef(null) // { onScreen, map } for the chapter as currently drawn
   const lastWord = useRef(-1)
+
+  const apply = (a, s) => {
+    a.playbackRate = s.speed
+    a.volume = s.volume
+  }
 
   useEffect(() => {
     api
@@ -232,6 +271,7 @@ function RecordedPlayer({ slug, chapter, textRef, follow, book, onClose }) {
         })
         setData({ segments, words, starts, total: offset })
         audio.current.src = segments[0].url
+        apply(audio.current, settings)
         return audio.current.play()
       })
       .catch((e) => {
@@ -281,7 +321,7 @@ function RecordedPlayer({ slug, chapter, textRef, follow, book, onClose }) {
     if (data && next < data.segments.length) {
       seg.current = next
       audio.current.src = data.segments[next].url
-      audio.current.playbackRate = speed
+      apply(audio.current, settings)
       audio.current.play().catch(() => {})
     } else {
       setPlaying(false)
@@ -303,11 +343,10 @@ function RecordedPlayer({ slug, chapter, textRef, follow, book, onClose }) {
         onToggle={() => (playing ? audio.current.pause() : audio.current.play())}
         progress={data?.total ? time / data.total : 0}
         time={`${clock(time)} / ${clock(data?.total || 0)}`}
-        speed={speed}
-        onSpeed={() => {
-          const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]
-          setSpeed(next)
-          audio.current.playbackRate = next
+        settings={settings}
+        onChange={(patch) => {
+          setSettings(patch)
+          apply(audio.current, { ...settings, ...patch })
         }}
         onClose={() => {
           audio.current?.pause()
@@ -319,33 +358,114 @@ function RecordedPlayer({ slug, chapter, textRef, follow, book, onClose }) {
   )
 }
 
-function Bar({ title, loading, playing, onToggle, progress, time, hint, speed, onSpeed, onClose }) {
+/**
+ * The player, inside the page above the chapter (pinned under the header while scrolling), so it
+ * never covers the text or the page controls. Settings: speed, volume and, for the device voice,
+ * which voice reads.
+ */
+function Bar({ title, loading, playing, onToggle, progress, time, settings, onChange, voices, onClose }) {
+  const [open, setOpen] = useState(false)
+  const panel = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e) => !panel.current?.contains(e.target) && setOpen(false)
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [open])
+
+  const muted = settings.volume === 0
   return (
-    <div className="fixed inset-x-3 bottom-3 z-50 mx-auto flex max-w-md items-center gap-2 rounded-2xl border border-line bg-surface/95 p-2 pr-3 shadow-2xl shadow-black/40 backdrop-blur-xl">
-      <button
-        className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-white shadow-lg"
-        onClick={onToggle}
-        aria-label={playing ? 'Pause' : 'Play'}
-        disabled={loading}
-      >
-        {loading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-      </button>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold">{title || 'This chapter'}</p>
-        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line">
-          <div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${Math.min(100, progress * 100)}%` }} />
+    <div ref={panel} className="sticky top-[4.5rem] z-30 mb-4">
+      <div className="flex items-center gap-2 rounded-2xl border border-line bg-surface/95 p-2 pr-2.5 shadow-xl shadow-black/15 backdrop-blur-xl">
+        <button
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-white shadow-lg"
+          onClick={onToggle}
+          aria-label={playing ? 'Pause' : 'Play'}
+          disabled={loading}
+        >
+          {loading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{title || 'This chapter'}</p>
+          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line">
+            <div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${Math.min(100, progress * 100)}%` }} />
+          </div>
+          <p className="mt-0.5 truncate text-[11px] text-muted">
+            {time} · {settings.speed}× · {muted ? 'muted' : `volume ${Math.round(settings.volume * 100)}%`}
+          </p>
         </div>
-        <p className="mt-0.5 truncate text-[11px] text-muted">
-          {time}
-          {hint && ` · ${hint}`}
-        </p>
+        <button
+          className="inline-flex items-center gap-1.5 rounded-xl border border-line px-2.5 py-2 text-sm font-medium text-muted hover:text-ink"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+        >
+          <SlidersHorizontal className="h-4 w-4" /> <span className="hidden sm:inline">Settings</span>
+        </button>
+        <button className="rounded-full p-1.5 text-muted hover:bg-surface-2 hover:text-ink" onClick={onClose} aria-label="Stop listening">
+          <X className="h-5 w-5" />
+        </button>
       </div>
-      <button className="rounded-lg px-2 py-1 text-sm font-semibold text-muted hover:text-ink" onClick={onSpeed} title="Reading speed">
-        {speed}×
-      </button>
-      <button className="rounded-full p-1.5 text-muted hover:bg-surface-2 hover:text-ink" onClick={onClose} aria-label="Stop listening">
-        <X className="h-5 w-5" />
-      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-2 w-full max-w-sm rounded-2xl border border-line bg-surface p-4 shadow-2xl shadow-black/25">
+          <p className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">Speed</p>
+          <div className="grid grid-cols-4 gap-1.5">
+            {SPEEDS.map((speed) => (
+              <button
+                key={speed}
+                onClick={() => onChange({ speed })}
+                className={`rounded-lg px-2 py-1.5 text-sm font-medium ${settings.speed === speed ? 'bg-brand text-white' : 'bg-surface-2 hover:bg-line'}`}
+              >
+                {speed}×
+              </button>
+            ))}
+          </div>
+
+          <p className="mt-4 mb-2 text-xs font-semibold tracking-wide text-muted uppercase">Volume</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onChange({ volume: muted ? 1 : 0 })}
+              className="rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-ink"
+              aria-label={muted ? 'Unmute' : 'Mute'}
+            >
+              {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={Math.round(settings.volume * 100)}
+              onChange={(e) => onChange({ volume: Number(e.target.value) / 100 })}
+              className="flex-1 accent-[var(--brand)]"
+              aria-label="Volume"
+            />
+            <span className="w-10 text-right text-xs text-muted tabular-nums">{Math.round(settings.volume * 100)}%</span>
+          </div>
+
+          {voices?.length > 1 && (
+            <>
+              <p className="mt-4 mb-2 text-xs font-semibold tracking-wide text-muted uppercase">Voice</p>
+              <div className="max-h-40 space-y-1 overflow-y-auto">
+                {voices.map((v, i) => {
+                  const chosen = settings.voiceURI ? settings.voiceURI === v.voiceURI : i === 0
+                  return (
+                    <button
+                      key={v.voiceURI}
+                      onClick={() => onChange({ voiceURI: v.voiceURI })}
+                      className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm ${chosen ? 'bg-brand/15 font-semibold text-brand' : 'hover:bg-surface-2'}`}
+                    >
+                      <span className="truncate">{v.name.replace(/^Microsoft |^Google /, '').replace(/ Online \(Natural\).*$/, ' (Natural)')}</span>
+                      <span className="shrink-0 text-[10px] text-muted">{v.lang}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

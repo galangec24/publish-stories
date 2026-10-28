@@ -5,12 +5,18 @@ export const canSpeak = () => typeof window !== 'undefined' && 'speechSynthesis'
 
 const PREFERRED = /natural|neural|online|siri|samantha|ava|allison|aria|jenny|google us english|google uk english/i
 
-/** The most natural-sounding English voice the device has. */
-export function englishVoice() {
+/** The device's English voices, most natural-sounding first. */
+export function englishVoices() {
   const voices = window.speechSynthesis.getVoices()
   const english = voices.filter((v) => /^en([-_]|$)/i.test(v.lang))
   const score = (v) => (PREFERRED.test(v.name) ? 4 : 0) + (/en[-_](us|gb|ph|au)/i.test(v.lang) ? 1 : 0) + (v.default ? 1 : 0)
-  return english.sort((a, b) => score(b) - score(a))[0] || null
+  return english.sort((a, b) => score(b) - score(a))
+}
+
+/** The voice the reader picked (by its id), or else the most natural-sounding English one. */
+export function englishVoice(voiceURI) {
+  const voices = englishVoices()
+  return voices.find((v) => v.voiceURI === voiceURI) || voices[0] || null
 }
 
 /**
@@ -42,9 +48,9 @@ const WORDS_PER_MINUTE = 165
  * word events (some Android voices) it is estimated from the speaking pace.
  * Returns a function that stops reading.
  */
-export function speakWords(words, { from = 0, rate = 1, onWord, onEnd }) {
+export function speakWords(words, { from = 0, rate = 1, volume = 1, voiceURI, onWord, onEnd }) {
   const synth = window.speechSynthesis
-  const voice = englishVoice()
+  const voice = englishVoice(voiceURI)
   let stopped = false
   let i = from
 
@@ -65,6 +71,7 @@ export function speakWords(words, { from = 0, rate = 1, onWord, onEnd }) {
     if (voice) utterance.voice = voice
     utterance.lang = voice?.lang || 'en-US'
     utterance.rate = rate
+    utterance.volume = volume
 
     let heardWords = false
     let pace

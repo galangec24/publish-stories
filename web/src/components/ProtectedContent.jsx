@@ -21,11 +21,34 @@ export function ProtectedContent({ children }) {
   useEffect(() => {
     document.body.classList.add('protected')
     let timer
-    const hide = () => setHidden(true)
+    const hide = () => {
+      clearTimeout(timer)
+      setHidden(true)
+    }
     const show = () => setHidden(!document.hasFocus() || document.hidden)
-    const onVisibility = () => (document.hidden ? hide() : show())
+    // Coming back to the window: wait a moment before showing the text. Snipping Tool's "New"
+    // briefly hands focus back to the browser right before it freezes the screen, so an instant
+    // reveal would be captured. A click or tap on the page (a real reader) shows it at once.
+    const showSoon = () => {
+      clearTimeout(timer)
+      timer = setTimeout(show, 1500)
+    }
+    const onVisibility = () => (document.hidden ? hide() : showSoon())
+    const onPointer = () => {
+      if (!document.hidden && document.hasFocus()) {
+        clearTimeout(timer)
+        show()
+      }
+    }
     const onKey = (e) => {
       const key = e.key
+      // Windows / Cmd key: every screenshot shortcut starts with it (Win+Shift+S, Cmd+Shift+3/4/5),
+      // so cover the text before the shortcut completes and the screen is frozen.
+      if (key === 'Meta' || key === 'OS') {
+        if (e.type === 'keydown') hide()
+        else showSoon()
+        return
+      }
       const screenshot =
         key === 'PrintScreen' || (e.metaKey && e.shiftKey && ['s', 'S', '3', '4', '5'].includes(key))
       const saveOrPrint = (e.ctrlKey || e.metaKey) && ['p', 'P', 's', 'S'].includes(key)
@@ -48,11 +71,12 @@ export function ProtectedContent({ children }) {
     }
 
     window.addEventListener('blur', hide)
-    window.addEventListener('focus', show)
+    window.addEventListener('focus', showSoon)
+    document.addEventListener('pointerdown', onPointer)
     document.addEventListener('visibilitychange', onVisibility)
     window.addEventListener('pagehide', hide) // leaving / app switcher snapshot
     document.addEventListener('freeze', hide)
-    window.addEventListener('pageshow', show)
+    window.addEventListener('pageshow', showSoon)
     document.addEventListener('touchstart', onTouch, { passive: true })
     window.addEventListener('keydown', onKey)
     window.addEventListener('keyup', onKey) // browsers report PrintScreen only on keyup
@@ -63,11 +87,12 @@ export function ProtectedContent({ children }) {
       clearTimeout(timer)
       document.body.classList.remove('protected')
       window.removeEventListener('blur', hide)
-      window.removeEventListener('focus', show)
+      window.removeEventListener('focus', showSoon)
+      document.removeEventListener('pointerdown', onPointer)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('pagehide', hide)
       document.removeEventListener('freeze', hide)
-      window.removeEventListener('pageshow', show)
+      window.removeEventListener('pageshow', showSoon)
       document.removeEventListener('touchstart', onTouch)
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('keyup', onKey)
