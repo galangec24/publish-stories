@@ -53,6 +53,16 @@ export function voicesReady() {
   })
 }
 
+// Only one reading at a time on the whole site: each new one takes over, and an older one never
+// continues (some browsers report a cancelled sentence as "finished", which would start its next one).
+let currentReading = 0
+
+/** Stop whatever is being read aloud. */
+export function stopSpeaking() {
+  currentReading++
+  if (canSpeak()) window.speechSynthesis.cancel()
+}
+
 const SENTENCE_END = /[.!?…]["'”’)\]]*$/
 const WORDS_PER_MINUTE = 165
 
@@ -65,11 +75,12 @@ const WORDS_PER_MINUTE = 165
 export function speakWords(words, { from = 0, rate = 1, volume = 1, voiceURI, language = pageLanguage(), onWord, onEnd }) {
   const synth = window.speechSynthesis
   const voice = readingVoice(voiceURI, language)
-  let stopped = false
+  const id = ++currentReading
+  const live = () => id === currentReading
   let i = from
 
   const next = () => {
-    if (stopped) return
+    if (!live()) return
     if (i >= words.length) return onEnd?.()
     const first = i
     const offsets = [] // where each word starts in the utterance text
@@ -93,12 +104,12 @@ export function speakWords(words, { from = 0, rate = 1, volume = 1, voiceURI, la
       onWord?.(first)
       let k = first
       pace = setInterval(() => {
-        if (heardWords || stopped || ++k >= i) return clearInterval(pace)
+        if (heardWords || !live() || ++k >= i) return clearInterval(pace)
         onWord?.(k)
       }, 60000 / (WORDS_PER_MINUTE * rate))
     }
     utterance.onboundary = (event) => {
-      if (event.name && event.name !== 'word') return
+      if (!live() || (event.name && event.name !== 'word')) return
       heardWords = true
       let w = 0
       while (w + 1 < offsets.length && offsets[w + 1] <= event.charIndex) w++
@@ -110,7 +121,7 @@ export function speakWords(words, { from = 0, rate = 1, volume = 1, voiceURI, la
     }
     utterance.onerror = (event) => {
       clearInterval(pace)
-      if (!stopped && event.error !== 'interrupted' && event.error !== 'canceled') next()
+      if (live() && event.error !== 'interrupted' && event.error !== 'canceled') next()
     }
     synth.speak(utterance)
   }
@@ -118,8 +129,7 @@ export function speakWords(words, { from = 0, rate = 1, volume = 1, voiceURI, la
   synth.cancel()
   setTimeout(next, 60) // Chrome drops an utterance queued right after cancel()
   return () => {
-    stopped = true
-    synth.cancel()
+    if (live()) stopSpeaking()
   }
 }
 

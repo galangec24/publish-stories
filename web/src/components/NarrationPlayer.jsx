@@ -6,6 +6,7 @@ import { canSpeak, englishVoices, pageLanguage, speakingSeconds, speakWords, unl
 import { SeekBar } from './SeekBar'
 import { useToast } from './ui'
 
+const LANGUAGE_NAMES = { fil: 'Filipino', ceb: 'Bisaya', ilo: 'Ilocano', es: 'Spanish', ja: 'Japanese', ko: 'Korean', zh: 'Chinese' }
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
 const BLOCKS = 'p,h1,h2,h3,h4,li,blockquote,pre,figure'
 const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
@@ -175,12 +176,16 @@ function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
   const [at, setAt] = useState(0)
   const words = useRef([])
   const stop = useRef(null)
+  const attempt = useRef(0) // a newer play/pause/close cancels a play still waiting for the voices
+  const restart = useRef(null)
 
   const play = async (from = at, options = settings) => {
+    const mine = ++attempt.current
     if (!textRef.current) return
     words.current = screenWords(textRef.current)
     if (!words.current.length) return
     await voicesReady()
+    if (mine !== attempt.current) return
     stop.current?.()
     setPlaying(true)
     stop.current = speakWords(
@@ -207,6 +212,8 @@ function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
     )
   }
   const pause = () => {
+    attempt.current++
+    clearTimeout(restart.current)
     stop.current?.()
     setPlaying(false)
   }
@@ -215,7 +222,11 @@ function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
   useEffect(() => {
     voicesReady().then(() => setVoices(voicesFor(language).length ? voicesFor(language) : englishVoices()))
     play(0)
-    return () => stop.current?.()
+    return () => {
+      attempt.current++
+      clearTimeout(restart.current)
+      stop.current?.()
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const total = words.current.length || chapter.word_count || 1
@@ -241,7 +252,6 @@ function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
   }
 
   // A new speed, volume or voice applies from the current word (once the slider settles).
-  const restart = useRef(null)
   const change = (patch) => {
     setSettings(patch)
     if (!playing) return
@@ -262,7 +272,11 @@ function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
       progress={at / total}
       onSeek={seek}
       describe={describe}
-      note={noVoice ? 'This device has no voice for this language, so an English voice reads it.' : ''}
+      note={
+        noVoice
+          ? `This browser has no ${LANGUAGE_NAMES[language] || 'voice for this language'}${LANGUAGE_NAMES[language] ? ' voice' : ''}, so an English voice reads it. Try Microsoft Edge or an Android phone.`
+          : ''
+      }
       time={`${clock(speakingSeconds(at, settings.speed))} / ${clock(speakingSeconds(total, settings.speed))}`}
       settings={settings}
       onChange={change}
@@ -461,7 +475,7 @@ function Bar({ title, loading, playing, onToggle, progress, onSeek, describe, no
           <p className="mt-0.5 truncate text-[11px] text-muted">
             {time} · {settings.speed}× · {muted ? 'muted' : `volume ${Math.round(settings.volume * 100)}%`}
           </p>
-          {note && <p className="truncate text-[11px] text-amber-500">{note}</p>}
+          {note && <p className="text-[11px] leading-snug text-amber-500">{note}</p>}
         </div>
         <button
           className="inline-flex items-center gap-1.5 rounded-xl border border-line px-2.5 py-2 text-sm font-medium text-muted hover:text-ink"
