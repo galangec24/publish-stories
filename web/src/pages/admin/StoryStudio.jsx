@@ -711,7 +711,7 @@ export function StoryStudio() {
           )}
           {tab === 'ai' && (
             <Group label="This chapter">
-              <Big icon={Sparkles} label="AI voice & reel" onClick={() => chapterIndex >= 0 && setAiOpen(true)} />
+              <Big icon={Sparkles} label="Listen & reel" onClick={() => chapterIndex >= 0 && setAiOpen(true)} />
             </Group>
           )}
         </div>
@@ -950,7 +950,14 @@ export function StoryStudio() {
       )}
 
       {aiOpen && chapterIndex >= 0 && (
-        <ChapterAI chapter={chapters[chapterIndex]} number={chapterIndex + 1} beforeRun={flush} onClose={() => setAiOpen(false)} />
+        <ChapterAI
+          chapter={chapters[chapterIndex]}
+          number={chapterIndex + 1}
+          storyTitle={story?.title || ''}
+          getText={() => quill.current?.getText() || ''}
+          beforeRun={flush}
+          onClose={() => setAiOpen(false)}
+        />
       )}
 
       {dialog && <PromptModal {...dialog} onDone={(v) => { dialog.resolve(v); setDialog(null) }} />}

@@ -55,6 +55,7 @@ def reel_card(reel, links):
     number = ids.index(chapter.id) + 1
     return {
         "id": reel.id,
+        "kind": reel.kind,
         "video_url": links.get(reel.video_key),
         "thumbnail_url": links.get(reel.thumbnail_key),
         "duration": reel.duration,
@@ -66,6 +67,7 @@ def reel_card(reel, links):
             "author_name": story.author_name,
             "cover_image": story.cover_image.url if story.cover_image else None,
             "chapter_count": len(ids),
+            "color": next((g.color for g in story.genres.all()), "") or "#6a4ff0",
             "free": story.all_chapters_free or story.price <= 0 or number <= story.free_chapters,
         },
     }
@@ -82,13 +84,14 @@ class ReelFeedView(APIView):
                 published=True, status=Status.READY, chapter__deleted_at__isnull=True, chapter__story__status=Story.Status.PUBLISHED
             )
             .select_related("chapter__story")
+            .prefetch_related("chapter__story__genres")
             .order_by("-chapter__story__published_at", "chapter__story_id", "chapter__order", "chapter_id")
         )
         story = request.query_params.get("story")
         if story:
             reels = [r for r in reels if r.chapter.story.slug == story]
         links = storage.signed_urls([k for r in reels for k in (r.video_key, r.thumbnail_key)])
-        return Response([reel_card(r, links) for r in reels if links.get(r.video_key)])
+        return Response([reel_card(r, links) for r in reels if r.kind == ChapterReel.Kind.VOICE or links.get(r.video_key)])
 
 
 # ---------- admin (Story Studio) ----------
@@ -119,6 +122,7 @@ def admin_state(chapter):
         "reel": reel
         and {
             "status": reel.status,
+            "kind": reel.kind,
             "script": reel.script,
             "avatar_id": reel.avatar_id,
             "published": reel.published,
@@ -198,7 +202,8 @@ class AdminPresentersView(APIView):
 
 
 class AdminReelView(APIView):
-    """POST {script, avatar_id} → record the reel. PATCH {published} → show/hide it. DELETE → remove it."""
+    """POST {kind, script, avatar_id?} → save a free reel, or record a presenter video.
+    PATCH {published} → show/hide it. DELETE → remove it."""
 
     permission_classes = [IsAdmin]
 
@@ -206,10 +211,22 @@ class AdminReelView(APIView):
         chapter = get_object_or_404(Chapter.objects.select_related("story"), pk=pk)
         script = (request.data.get("script") or "").strip()
         avatar_id = (request.data.get("avatar_id") or "").strip()
+        kind = request.data.get("kind") or ChapterReel.Kind.VOICE
         if not script:
             return _error("Write or generate the script first.")
         if len(script) > 1500:
             return _error("Keep the script under 1,500 characters (about a minute and a half).")
+        if kind == ChapterReel.Kind.VOICE:
+            # Free: nothing to render, so it's ready at once (and already in Reels if it was before).
+            reel, _ = ChapterReel.objects.get_or_create(chapter=chapter)
+            if reel.kind == ChapterReel.Kind.VIDEO:
+                storage.delete(reel.video_key, reel.thumbnail_key)
+            reel.kind, reel.script, reel.status, reel.error = ChapterReel.Kind.VOICE, script, Status.READY, ""
+            reel.video_key = reel.thumbnail_key = reel.provider_video_id = ""
+            reel.save()
+            return Response(admin_state(chapter))
+        if kind != ChapterReel.Kind.VIDEO:
+            return _error("Unknown reel style.")
         if not avatar_id:
             return _error("Choose a presenter.")
         if not storage.configured():
@@ -221,7 +238,7 @@ class AdminReelView(APIView):
             video_id = providers.start_video(script, avatar_id, f"{chapter.story.title} - Chapter {_chapter_number(chapter)}")
         except providers.ProviderError as exc:
             return _error(exc)
-        reel.script, reel.avatar_id, reel.provider_video_id = script, avatar_id, video_id
+        reel.kind, reel.script, reel.avatar_id, reel.provider_video_id = ChapterReel.Kind.VIDEO, script, avatar_id, video_id
         reel.status, reel.error = Status.WORKING, ""
         reel.save()
         return Response(admin_state(chapter), status=status.HTTP_202_ACCEPTED)

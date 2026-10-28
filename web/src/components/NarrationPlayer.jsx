@@ -2,11 +2,14 @@ import { Headphones, LoaderCircle, Pause, Play, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { api } from '../lib/api'
+import { canSpeak, speakingSeconds, speakWords, unlockSpeech, voicesReady } from '../lib/deviceVoice'
 import { useToast } from './ui'
 
 const SPEEDS = [1, 1.25, 1.5, 0.75]
 const BLOCKS = 'p,h1,h2,h3,h4,li,blockquote,pre,figure'
 const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+const highlights = () => typeof CSS !== 'undefined' && CSS.highlights && typeof Highlight === 'function'
 
 /**
  * The chapter's words on screen, in order, each as a Range (a word split across bold/italic
@@ -58,99 +61,173 @@ function matchWords(spoken, onScreen) {
   return map
 }
 
-const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
-
-/**
- * "Listen": the AI voice reads the open chapter word for word and each word lights up as it
- * is read. In scroll mode the page follows along (until the reader scrolls themselves).
- */
-export function NarrationPlayer({ slug, chapter, textRef, follow }) {
-  const toast = useToast()
-  const audio = useRef(null)
-  const [data, setData] = useState(null) // { segments, words, starts, total }
-  const [loading, setLoading] = useState(false)
-  const [open, setOpen] = useState(false)
-  const [playing, setPlaying] = useState(false)
-  const [speed, setSpeed] = useState(1)
-  const [time, setTime] = useState(0)
-  const seg = useRef(0)
-  const match = useRef(null) // { onScreen, map } for the chapter as currently drawn
-  const lastWord = useRef(-1)
+/** Lights up one on-screen word and, in scroll mode, keeps it in view unless the reader is scrolling. */
+function useWordMark(follow) {
   const userScrolledAt = useRef(0)
-
-  const highlights = typeof CSS !== 'undefined' && CSS.highlights && typeof Highlight === 'function'
-
-  const clearMark = () => {
-    if (highlights) CSS.highlights.delete('narration')
-    lastWord.current = -1
-  }
-
-  // A different chapter: stop and forget the old reading.
   useEffect(() => {
-    audio.current?.pause()
-    setOpen(false)
-    setPlaying(false)
-    setData(null)
-    setTime(0)
-    seg.current = 0
-    match.current = null
-    clearMark()
-  }, [chapter?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => () => clearMark(), []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Reading by hand pauses the follow-along for a few seconds.
-  useEffect(() => {
-    if (!open) return
     const mark = () => (userScrolledAt.current = Date.now())
     window.addEventListener('wheel', mark, { passive: true })
     window.addEventListener('touchmove', mark, { passive: true })
     return () => {
       window.removeEventListener('wheel', mark)
       window.removeEventListener('touchmove', mark)
+      if (highlights()) CSS.highlights.delete('narration')
     }
-  }, [open])
+  }, [])
+  return {
+    show(word) {
+      if (!word) return
+      if (highlights()) CSS.highlights.set('narration', new Highlight(word.range))
+      if (follow && Date.now() - userScrolledAt.current > 5000) {
+        const r = word.range.getBoundingClientRect()
+        if (r.height && (r.top < 90 || r.bottom > window.innerHeight - 140)) {
+          window.scrollBy({ top: r.top - window.innerHeight * 0.35, behavior: 'smooth' })
+        }
+      }
+    },
+    clear() {
+      if (highlights()) CSS.highlights.delete('narration')
+    },
+  }
+}
 
-  async function start() {
-    setOpen(true)
-    if (data) return audio.current.play()
-    setLoading(true)
-    try {
-      const { segments } = await api.get(`stories/${slug}/chapters/${chapter.id}/narration/`)
-      const words = []
-      const starts = []
-      let offset = 0
-      segments.forEach((s, si) => {
-        starts.push(offset)
-        s.words.forEach((w) => words.push({ si, text: w[0], start: w[1], end: w[2] }))
-        offset += s.duration
+/**
+ * "Listen": the chapter is read aloud word for word and each word lights up as it is read.
+ * Free by default (the reader's own device voice); a chapter with an AI reading made in the
+ * Studio uses that natural voice instead. In scroll mode the page follows along.
+ */
+export function NarrationPlayer({ slug, chapter, textRef, follow }) {
+  const [open, setOpen] = useState(false)
+  useEffect(() => setOpen(false), [chapter?.id])
+
+  if (!chapter?.content) return null
+  const premium = Boolean(chapter.narrated)
+  if (!premium && !canSpeak()) return null
+  if (!open) {
+    return (
+      <button
+        className="btn-ghost mb-4 !py-2"
+        onClick={() => {
+          if (!premium) unlockSpeech()
+          setOpen(true)
+        }}
+      >
+        <Headphones className="h-4 w-4 text-brand" /> Listen to this chapter
+      </button>
+    )
+  }
+  const props = { slug, chapter, textRef, follow, onClose: () => setOpen(false) }
+  return premium ? <RecordedPlayer key={chapter.id} {...props} /> : <DevicePlayer key={chapter.id} {...props} />
+}
+
+/** Free: the device voice reads the words straight from the page. */
+function DevicePlayer({ chapter, textRef, follow, onClose }) {
+  const mark = useWordMark(follow)
+  const [playing, setPlaying] = useState(false)
+  const [speed, setSpeed] = useState(1)
+  const [at, setAt] = useState(0)
+  const words = useRef([])
+  const stop = useRef(null)
+
+  const play = async (from = at, rate = speed) => {
+    if (!textRef.current) return
+    words.current = screenWords(textRef.current)
+    if (!words.current.length) return
+    await voicesReady()
+    stop.current?.()
+    setPlaying(true)
+    stop.current = speakWords(
+      words.current.map((w) => w.text),
+      {
+        from: from >= words.current.length ? 0 : from,
+        rate,
+        onWord: (i) => {
+          setAt(i)
+          mark.show(words.current[i])
+        },
+        onEnd: () => {
+          setPlaying(false)
+          setAt(0)
+          mark.clear()
+        },
+      },
+    )
+  }
+  const pause = () => {
+    stop.current?.()
+    setPlaying(false)
+  }
+
+  useEffect(() => {
+    play(0)
+    return () => stop.current?.()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const total = words.current.length || chapter.word_count || 1
+  return (
+    <Bar
+      title={chapter.title}
+      playing={playing}
+      onToggle={() => {
+        if (playing) return pause()
+        unlockSpeech()
+        play()
+      }}
+      progress={at / total}
+      time={`${clock(speakingSeconds(at, speed))} / ${clock(speakingSeconds(total, speed))}`}
+      hint={follow ? 'Your device voice' : 'Scroll mode follows along'}
+      speed={speed}
+      onSpeed={() => {
+        const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]
+        setSpeed(next)
+        if (playing) play(at, next)
+      }}
+      onClose={() => {
+        pause()
+        mark.clear()
+        onClose()
+      }}
+    />
+  )
+}
+
+/** The natural AI voice made in the Studio (ElevenLabs), with the time of every word. */
+function RecordedPlayer({ slug, chapter, textRef, follow, onClose }) {
+  const toast = useToast()
+  const mark = useWordMark(follow)
+  const audio = useRef(null)
+  const [data, setData] = useState(null) // { segments, words, starts, total }
+  const [playing, setPlaying] = useState(false)
+  const [speed, setSpeed] = useState(1)
+  const [time, setTime] = useState(0)
+  const seg = useRef(0)
+  const match = useRef(null) // { onScreen, map } for the chapter as currently drawn
+  const lastWord = useRef(-1)
+
+  useEffect(() => {
+    api
+      .get(`stories/${slug}/chapters/${chapter.id}/narration/`)
+      .then(({ segments }) => {
+        const words = []
+        const starts = []
+        let offset = 0
+        segments.forEach((s, si) => {
+          starts.push(offset)
+          s.words.forEach((w) => words.push({ si, text: w[0], start: w[1], end: w[2] }))
+          offset += s.duration
+        })
+        setData({ segments, words, starts, total: offset })
+        audio.current.src = segments[0].url
+        return audio.current.play()
       })
-      setData({ segments, words, starts, total: offset })
-      seg.current = 0
-      audio.current.src = segments[0].url
-      audio.current.playbackRate = speed
-      await audio.current.play()
-    } catch (e) {
-      toast(e, 'error')
-      setOpen(false)
-    } finally {
-      setLoading(false)
-    }
-  }
+      .catch((e) => {
+        toast(e, 'error')
+        onClose()
+      })
+    return () => audio.current?.pause()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function stop() {
-    audio.current?.pause()
-    setOpen(false)
-    clearMark()
-  }
-
-  function toggleSpeed() {
-    const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]
-    setSpeed(next)
-    if (audio.current) audio.current.playbackRate = next
-  }
-
-  // Light up the word being read (and keep it in view).
+  // Light up the word being read.
   useEffect(() => {
     if (!playing || !data) return
     let frame
@@ -161,7 +238,6 @@ export function NarrationPlayer({ slug, chapter, textRef, follow }) {
       const si = seg.current
       const t = audio.current.currentTime
       setTime(data.starts[si] + t)
-      // the last word of this piece that has started
       let lo = first[si]
       let hi = end[si] - 1
       let found = -1
@@ -178,20 +254,13 @@ export function NarrationPlayer({ slug, chapter, textRef, follow }) {
           const onScreen = screenWords(textRef.current)
           match.current = { onScreen, map: matchWords(data.words.map((w) => w.text), onScreen) }
         }
-        const word = match.current.onScreen[match.current.map[found]]
-        if (word && highlights) CSS.highlights.set('narration', new Highlight(word.range))
-        if (word && follow && Date.now() - userScrolledAt.current > 5000) {
-          const r = word.range.getBoundingClientRect()
-          if (r.height && (r.top < 90 || r.bottom > window.innerHeight - 140)) {
-            window.scrollBy({ top: r.top - window.innerHeight * 0.35, behavior: 'smooth' })
-          }
-        }
+        mark.show(match.current.onScreen[match.current.map[found]])
       }
       frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-  }, [playing, data, follow]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [playing, data]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function onEnded() {
     const next = seg.current + 1
@@ -202,50 +271,68 @@ export function NarrationPlayer({ slug, chapter, textRef, follow }) {
       audio.current.play().catch(() => {})
     } else {
       setPlaying(false)
-      clearMark()
+      mark.clear()
+      lastWord.current = -1
       seg.current = 0
       if (data) audio.current.src = data.segments[0].url
       setTime(0)
     }
   }
 
-  if (!chapter?.narrated || !chapter.content) return null
-
   return (
     <>
       <audio ref={audio} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={onEnded} />
-      {!open ? (
-        <button className="btn-ghost mb-4 !py-2" onClick={start}>
-          <Headphones className="h-4 w-4 text-brand" /> Listen to this chapter
-        </button>
-      ) : (
-        <div className="fixed inset-x-3 bottom-3 z-50 mx-auto flex max-w-md items-center gap-2 rounded-2xl border border-line bg-surface/95 p-2 pr-3 shadow-2xl shadow-black/40 backdrop-blur-xl">
-          <button
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-white shadow-lg"
-            onClick={() => (playing ? audio.current.pause() : audio.current.play())}
-            aria-label={playing ? 'Pause' : 'Play'}
-            disabled={loading}
-          >
-            {loading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-          </button>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{chapter.title || 'This chapter'}</p>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line">
-              <div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${data?.total ? (time / data.total) * 100 : 0}%` }} />
-            </div>
-            <p className="mt-0.5 text-[11px] text-muted">
-              {clock(time)} / {clock(data?.total || 0)}
-              {!follow && ' · Scroll mode follows along'}
-            </p>
-          </div>
-          <button className="rounded-lg px-2 py-1 text-sm font-semibold text-muted hover:text-ink" onClick={toggleSpeed} title="Reading speed">
-            {speed}×
-          </button>
-          <button className="rounded-full p-1.5 text-muted hover:bg-surface-2 hover:text-ink" onClick={stop} aria-label="Stop listening">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-      )}
+      <Bar
+        title={chapter.title}
+        loading={!data}
+        playing={playing}
+        onToggle={() => (playing ? audio.current.pause() : audio.current.play())}
+        progress={data?.total ? time / data.total : 0}
+        time={`${clock(time)} / ${clock(data?.total || 0)}`}
+        hint={follow ? '' : 'Scroll mode follows along'}
+        speed={speed}
+        onSpeed={() => {
+          const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]
+          setSpeed(next)
+          audio.current.playbackRate = next
+        }}
+        onClose={() => {
+          audio.current?.pause()
+          mark.clear()
+          onClose()
+        }}
+      />
     </>
+  )
+}
+
+function Bar({ title, loading, playing, onToggle, progress, time, hint, speed, onSpeed, onClose }) {
+  return (
+    <div className="fixed inset-x-3 bottom-3 z-50 mx-auto flex max-w-md items-center gap-2 rounded-2xl border border-line bg-surface/95 p-2 pr-3 shadow-2xl shadow-black/40 backdrop-blur-xl">
+      <button
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-white shadow-lg"
+        onClick={onToggle}
+        aria-label={playing ? 'Pause' : 'Play'}
+        disabled={loading}
+      >
+        {loading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+      </button>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold">{title || 'This chapter'}</p>
+        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line">
+          <div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${Math.min(100, progress * 100)}%` }} />
+        </div>
+        <p className="mt-0.5 truncate text-[11px] text-muted">
+          {time}
+          {hint && ` · ${hint}`}
+        </p>
+      </div>
+      <button className="rounded-lg px-2 py-1 text-sm font-semibold text-muted hover:text-ink" onClick={onSpeed} title="Reading speed">
+        {speed}×
+      </button>
+      <button className="rounded-full p-1.5 text-muted hover:bg-surface-2 hover:text-ink" onClick={onClose} aria-label="Stop listening">
+        <X className="h-5 w-5" />
+      </button>
+    </div>
   )
 }

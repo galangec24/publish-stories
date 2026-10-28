@@ -85,7 +85,9 @@ class AIMediaTests(APITestCase):
         with mock.patch("ai_media.providers.start_video", return_value="v_1"), mock.patch(
             "ai_media.providers.video_state", return_value={"status": "processing"}
         ), mock.patch("ai_media.storage.signed_urls", side_effect=fake_links):
-            response = self.client.post(f"/api/admin/chapters/{self.free.id}/ai/reel/", {"script": script, "avatar_id": "look_1"}, format="json")
+            response = self.client.post(
+                f"/api/admin/chapters/{self.free.id}/ai/reel/", {"kind": "video", "script": script, "avatar_id": "look_1"}, format="json"
+            )
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.data["reel"]["status"], Status.WORKING)
 
@@ -107,6 +109,20 @@ class AIMediaTests(APITestCase):
         self.assertEqual(feed[0]["video_url"], "https://signed/v.mp4")
         self.assertEqual(feed[0]["chapter"]["number"], 1)
         self.assertTrue(feed[0]["story"]["free"])
+
+    @override_settings(ELEVENLABS_API_KEY="", HEYGEN_API_KEY="", ANTHROPIC_API_KEY="", SUPABASE_URL="", SUPABASE_SERVICE_KEY="")
+    def test_free_reel_needs_no_services(self):
+        self.client.force_authenticate(self.admin)
+        state = self.client.post(f"/api/admin/chapters/{self.paid.id}/ai/reel/", {"script": "Nobody knew why."}, format="json").data
+        self.assertEqual((state["reel"]["kind"], state["reel"]["status"]), ("voice", Status.READY))
+        self.client.patch(f"/api/admin/chapters/{self.paid.id}/ai/reel/", {"published": True}, format="json")
+
+        self.client.force_authenticate(None)
+        feed = self.client.get("/api/reels/").data
+        self.assertEqual(len(feed), 1)
+        self.assertEqual((feed[0]["kind"], feed[0]["script"], feed[0]["video_url"]), ("voice", "Nobody knew why.", None))
+        self.assertEqual(feed[0]["chapter"]["number"], 2)
+        self.assertFalse(feed[0]["story"]["free"])
 
     def test_admin_only(self):
         self.assertIn(self.client.get(f"/api/admin/chapters/{self.free.id}/ai/").status_code, (401, 403))

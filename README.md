@@ -19,8 +19,8 @@ A story-reading website for **Maria Gemima Valderrama**, a Davao-based journalis
 - Home page with shelves (For you, Most read, New & updated, Free reads, by genre), a separate **Columns** tab, and a **Find your genre** section.
 - Search as you type, with covers, recent searches, and **Hot read**, **Recommended** and star-rating tags.
 - Two reading modes, book pages or one long scroll, and Light, Dark or Sepia themes.
-- **Listen**: an AI voice reads a chapter word for word while each word lights up (only chapters the reader can open).
-- **Reels**: a swipeable feed of one-minute videos where a human-looking AI presenter introduces each chapter.
+- **Listen**: the reader's own device voice reads a chapter word for word while each word lights up (free; only chapters the reader can open). A premium ElevenLabs voice can replace it per chapter.
+- **Reels**: a swipeable feed introducing each chapter: free reels show the author's photo with captions read by the device voice; optional HeyGen presenter videos.
 - **Free chapters, then pay once.** The author decides how many chapters are free.
 - **QR payments without an account.** Scan GCash or a bank QR that already carries the price, upload the receipt and type the reference number, and the story opens immediately. It also opens on other devices on the same home Wi-Fi, and anywhere the reader enters their access code.
 - Likes, comments (with Admin/Reader badges), 1–5 star ratings, and **My purchases** with each payment's status.
@@ -30,7 +30,7 @@ A story-reading website for **Maria Gemima Valderrama**, a Davao-based journalis
 
 **For the author (admin)**
 - **Story Studio**: a Word-style editor with chapters, pictures, fonts and sizes, and a free/paid lock on each chapter.
-- **AI tab** in the Studio: make a chapter's AI reading (ElevenLabs) and its reel (script drafted by Claude, video by HeyGen), then choose which reels appear.
+- **AI tab** in the Studio: write a chapter's reel (or start from the chapter's opening) and choose which reels appear. Optional paid extras: ElevenLabs readings, Claude-drafted scripts, HeyGen videos.
 - Upload one manuscript (.docx/.md/.txt) with a chapter preview, or bulk-import many at once.
 - QR payment review (confirm or revoke), searchable. You can also manage the QR codes themselves; uploading one reads the QR and fills in the details.
 - Sales report (daily, weekly, monthly, yearly, per story, CSV export), readers and payments monitor, and comment moderation.

@@ -30,9 +30,18 @@ class ChapterNarration(models.Model):
 
 
 class ChapterReel(models.Model):
-    """A short (about one minute) presenter video introducing a chapter (HeyGen)."""
+    """A short (about one minute) reel introducing a chapter.
+
+    "voice" (free): the author's photo with the script as captions, read aloud by the viewer's
+    own device voice; nothing to render or store. "video" (paid): a HeyGen presenter video.
+    """
+
+    class Kind(models.TextChoices):
+        VOICE = "voice", "Author photo + device voice"
+        VIDEO = "video", "AI presenter video"
 
     chapter = models.OneToOneField(Chapter, on_delete=models.CASCADE, related_name="reel")
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.VOICE)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.NONE)
     script = models.TextField(blank=True)
     avatar_id = models.CharField(max_length=120, blank=True)
