@@ -13,7 +13,7 @@ const GAP = 64
  *
  * `startAtEnd` opens on the last page (used when going back a chapter).
  */
-export function BookReader({ children, onPrevChapter, onNextChapter, hasPrev, hasNext, startAtEnd, contentKey, initialPage = null, onPageChange, jumpTo = null }) {
+export function BookReader({ children, onPrevChapter, onNextChapter, hasPrev, hasNext, startAtEnd, contentKey, initialPage = null, onPageChange, jumpTo = null, controlRef }) {
   const frame = useRef(null)
   const flow = useRef(null)
   const [page, setPage] = useState(0)
@@ -109,6 +109,24 @@ export function BookReader({ children, onPrevChapter, onNextChapter, hasPrev, ha
   useEffect(() => {
     if (page >= 0) onPageChange?.(page)
   }, [page]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lets "Listen" turn to the page holding the word being read.
+  useEffect(() => {
+    if (!controlRef) return
+    controlRef.current = {
+      showRange(range) {
+        if (!size.w || !flow.current) return
+        const r = range.getBoundingClientRect()
+        if (!r.width && !r.height) return
+        const x = r.left + r.width / 2 - flow.current.getBoundingClientRect().left
+        const target = Math.min(pages - 1, Math.max(0, Math.floor(x / (size.w + GAP))))
+        setPage((p) => (p === target ? p : target))
+      },
+    }
+    return () => {
+      controlRef.current = null
+    }
+  }, [controlRef, size.w, pages])
   const columnWidth = spread ? (size.w - GAP) / 2 : size.w
 
   return (

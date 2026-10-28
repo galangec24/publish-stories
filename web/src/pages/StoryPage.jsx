@@ -34,6 +34,7 @@ export function StoryPage() {
   const updateSocial = (patch) => setSocial((x) => ({ ...x, ...patch }))
   const top = useRef()
   const textRef = useRef(null) // the chapter text, for the word-by-word highlight while listening
+  const bookControl = useRef(null) // lets Listen turn the book to the page being read
 
   // Count this visit (once per reader per day, server-side) and show live totals.
   useEffect(() => {
@@ -394,7 +395,7 @@ export function StoryPage() {
             })),
           ])}
         />
-        <NarrationPlayer slug={s.slug} chapter={chapter} textRef={textRef} follow={mode === 'scroll'} />
+        <NarrationPlayer slug={s.slug} chapter={chapter} textRef={textRef} follow={mode === 'scroll'} book={mode === 'book' ? bookControl : null} />
         <ProtectedContent>
           {mode === 'book' ? (
             <div className="rounded-3xl border border-line bg-page px-6 py-8 shadow-2xl shadow-black/20 sm:px-12 sm:py-10">
@@ -404,6 +405,7 @@ export function StoryPage() {
                 initialPage={resumeAt.current?.chapterId === chapter?.id ? resumeAt.current.page : null}
                 onPageChange={rememberPage}
                 jumpTo={jump}
+                controlRef={bookControl}
                 hasPrev={index > 0}
                 hasNext={index < s.chapters.length - 1}
                 onPrevChapter={() => go(index - 1, { atEnd: true })}

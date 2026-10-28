@@ -61,9 +61,17 @@ function matchWords(spoken, onScreen) {
   return map
 }
 
-/** Lights up one on-screen word and, in scroll mode, keeps it in view unless the reader is scrolling. */
-function useWordMark(follow) {
+const FOLLOW_PAUSE_MS = 4000 // after the reader scrolls by hand, wait this long before following again
+
+/**
+ * Lights up one on-screen word and keeps it in view: in scroll mode the page scrolls so the word
+ * sits about a third of the way down; in book mode (`book` is the BookReader control) the book
+ * turns to the word's page.
+ */
+function useWordMark(follow, book) {
   const userScrolledAt = useRef(0)
+  const view = useRef({ follow, book })
+  view.current = { follow, book } // the reader can switch between book and scroll while listening
   useEffect(() => {
     const mark = () => (userScrolledAt.current = Date.now())
     window.addEventListener('wheel', mark, { passive: true })
@@ -78,10 +86,13 @@ function useWordMark(follow) {
     show(word) {
       if (!word) return
       if (highlights()) CSS.highlights.set('narration', new Highlight(word.range))
-      if (follow && Date.now() - userScrolledAt.current > 5000) {
+      const { follow, book } = view.current
+      if (book?.current) return book.current.showRange(word.range)
+      if (follow && Date.now() - userScrolledAt.current > FOLLOW_PAUSE_MS) {
         const r = word.range.getBoundingClientRect()
-        if (r.height && (r.top < 90 || r.bottom > window.innerHeight - 140)) {
-          window.scrollBy({ top: r.top - window.innerHeight * 0.35, behavior: 'smooth' })
+        const h = window.innerHeight
+        if (r.height && (r.top < h * 0.15 || r.bottom > h * 0.65)) {
+          window.scrollBy({ top: r.top - h * 0.33, behavior: 'smooth' })
         }
       }
     },
@@ -96,7 +107,7 @@ function useWordMark(follow) {
  * Free by default (the reader's own device voice); a chapter with an AI reading made in the
  * Studio uses that natural voice instead. In scroll mode the page follows along.
  */
-export function NarrationPlayer({ slug, chapter, textRef, follow }) {
+export function NarrationPlayer({ slug, chapter, textRef, follow, book }) {
   const [open, setOpen] = useState(false)
   useEffect(() => setOpen(false), [chapter?.id])
 
@@ -116,13 +127,13 @@ export function NarrationPlayer({ slug, chapter, textRef, follow }) {
       </button>
     )
   }
-  const props = { slug, chapter, textRef, follow, onClose: () => setOpen(false) }
+  const props = { slug, chapter, textRef, follow, book, onClose: () => setOpen(false) }
   return premium ? <RecordedPlayer key={chapter.id} {...props} /> : <DevicePlayer key={chapter.id} {...props} />
 }
 
 /** Free: the device voice reads the words straight from the page. */
-function DevicePlayer({ chapter, textRef, follow, onClose }) {
-  const mark = useWordMark(follow)
+function DevicePlayer({ chapter, textRef, follow, book, onClose }) {
+  const mark = useWordMark(follow, book)
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState(1)
   const [at, setAt] = useState(0)
@@ -143,6 +154,9 @@ function DevicePlayer({ chapter, textRef, follow, onClose }) {
         rate,
         onWord: (i) => {
           setAt(i)
+          if (textRef.current && !textRef.current.contains(words.current[i]?.range.startContainer)) {
+            words.current = screenWords(textRef.current)
+          }
           mark.show(words.current[i])
         },
         onEnd: () => {
@@ -175,7 +189,7 @@ function DevicePlayer({ chapter, textRef, follow, onClose }) {
       }}
       progress={at / total}
       time={`${clock(speakingSeconds(at, speed))} / ${clock(speakingSeconds(total, speed))}`}
-      hint={follow ? 'Your device voice' : 'Scroll mode follows along'}
+      hint="Your device voice"
       speed={speed}
       onSpeed={() => {
         const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]
@@ -192,9 +206,9 @@ function DevicePlayer({ chapter, textRef, follow, onClose }) {
 }
 
 /** The natural AI voice made in the Studio (ElevenLabs), with the time of every word. */
-function RecordedPlayer({ slug, chapter, textRef, follow, onClose }) {
+function RecordedPlayer({ slug, chapter, textRef, follow, book, onClose }) {
   const toast = useToast()
-  const mark = useWordMark(follow)
+  const mark = useWordMark(follow, book)
   const audio = useRef(null)
   const [data, setData] = useState(null) // { segments, words, starts, total }
   const [playing, setPlaying] = useState(false)
@@ -289,7 +303,6 @@ function RecordedPlayer({ slug, chapter, textRef, follow, onClose }) {
         onToggle={() => (playing ? audio.current.pause() : audio.current.play())}
         progress={data?.total ? time / data.total : 0}
         time={`${clock(time)} / ${clock(data?.total || 0)}`}
-        hint={follow ? '' : 'Scroll mode follows along'}
         speed={speed}
         onSpeed={() => {
           const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]
