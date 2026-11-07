@@ -303,14 +303,17 @@ svg.lucide {
   transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s;
 }
 .tile-3d svg.lucide { filter: drop-shadow(0 1.5px 0 rgb(0 0 0 / 0.3)) drop-shadow(0 -0.5px 0 rgb(255 255 255 / 0.35)); }
-.tile-3d:hover,
-.group:hover .tile-3d {
-  transform: perspective(320px) rotateX(0) rotateY(0) translateY(-3px) scale(1.06);
-  box-shadow:
-    inset 0 1.5px 0 rgb(255 255 255 / 0.45),
-    inset 0 -3px 0 rgb(0 0 0 / 0.22),
-    0 16px 26px -8px color-mix(in srgb, var(--brand) 80%, transparent),
-    0 3px 6px rgb(0 0 0 / 0.25);
+/* Mouse only: on phones a hover change makes the first tap only "hover". */
+@media (hover: hover) {
+  .tile-3d:hover,
+  .group:hover .tile-3d {
+    transform: perspective(320px) rotateX(0) rotateY(0) translateY(-3px) scale(1.06);
+    box-shadow:
+      inset 0 1.5px 0 rgb(255 255 255 / 0.45),
+      inset 0 -3px 0 rgb(0 0 0 / 0.22),
+      0 16px 26px -8px color-mix(in srgb, var(--brand) 80%, transparent),
+      0 3px 6px rgb(0 0 0 / 0.25);
+  }
 }
 .bevel-3d {
   box-shadow:

@@ -70,7 +70,7 @@ export function JumpMenu({ label, items }) {
               <button
                 type="button"
                 onClick={() => pick(item)}
-                onMouseEnter={() => setActive(i)}
+                onPointerEnter={(e) => e.pointerType === 'mouse' && setActive(i)}
                 className={`flex w-full items-center gap-2 rounded-lg py-1.5 pr-3 text-left transition ${i === active ? 'bg-surface-2' : ''} ${
                   item.current ? 'text-brand' : item.level ? 'text-muted' : 'text-ink'
                 } ${item.level ? 'text-xs' : 'font-semibold'}`}

@@ -24,7 +24,7 @@ export function AboutMe({ about }) {
         <div className="pointer-events-none absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-accent/15 blur-3xl" />
 
         <div className="relative grid items-center gap-10 md:grid-cols-[minmax(0,320px)_1fr]">
-          <div className="mx-auto w-64 [perspective:1000px] sm:w-72 md:w-full" onMouseMove={onMove} onMouseLeave={() => (frame.current.style.transform = '')}>
+          <div className="mx-auto w-64 [perspective:1000px] sm:w-72 md:w-full" onPointerMove={(e) => e.pointerType === 'mouse' && onMove(e)} onPointerLeave={() => (frame.current.style.transform = '')}>
             <div ref={frame} className="relative transition-transform duration-300 ease-out [transform-style:preserve-3d]">
               <div className="absolute inset-0 translate-x-4 translate-y-4 rounded-3xl bg-gradient-to-br from-accent/60 to-brand/60 [transform:translateZ(-30px)]" />
               {/* White mat so the white-background portrait reads as a photo print in every theme */}

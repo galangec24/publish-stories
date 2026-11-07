@@ -19,7 +19,7 @@ function Stars({ value, onPick, size = 'h-6 w-6' }) {
   const [hover, setHover] = useState(0)
   const shown = hover || value
   return (
-    <div className="flex" onMouseLeave={() => setHover(0)} role={onPick ? 'radiogroup' : 'img'} aria-label={onPick ? 'Your rating' : `${value} out of 5`}>
+    <div className="flex" onPointerLeave={() => setHover(0)} role={onPick ? 'radiogroup' : 'img'} aria-label={onPick ? 'Your rating' : `${value} out of 5`}>
       {[1, 2, 3, 4, 5].map((n) => {
         const filled = shown >= n - 0.25
         const icon = <Star className={`${size} ${filled ? 'fill-amber-400 text-amber-400' : 'text-line'}`} />
@@ -30,7 +30,7 @@ function Stars({ value, onPick, size = 'h-6 w-6' }) {
             role="radio"
             aria-checked={value === n}
             aria-label={`${n} star${n === 1 ? '' : 's'}`}
-            onMouseEnter={() => setHover(n)}
+            onPointerEnter={(e) => e.pointerType === 'mouse' && setHover(n)}
             onClick={() => onPick(n)}
             className="p-0.5 transition hover:scale-110"
           >

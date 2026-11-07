@@ -48,7 +48,10 @@ export function Book3D({ story, size = 'md', genre }) {
   const width = size === 'lg' ? 'w-48' : 'w-36 sm:w-40'
   const ribbon = story.is_free ? ['FREE', 'bg-emerald-500 text-white'] : isNew(story) ? ['NEW', 'bg-accent text-accent-ink'] : null
 
+  // Real mouse only: on iPhones a tap sends a fake mouse move, and changing the book then makes
+  // Safari treat the tap as a hover instead of opening the story.
   const onMove = (e) => {
+    if (e.pointerType !== 'mouse') return
     const r = ref.current.getBoundingClientRect()
     const x = (e.clientX - r.left) / r.width - 0.5
     const y = (e.clientY - r.top) / r.height - 0.5
@@ -67,8 +70,8 @@ export function Book3D({ story, size = 'md', genre }) {
         <div className="absolute inset-x-3 -bottom-3 h-5 rounded-[50%] bg-black/45 blur-md transition-all duration-300 group-hover:inset-x-6 group-hover:-bottom-5 group-hover:bg-black/30" />
         <div
           ref={ref}
-          onMouseMove={onMove}
-          onMouseLeave={onLeave}
+          onPointerMove={onMove}
+          onPointerLeave={onLeave}
           className="book-3d relative aspect-[2/3] [transform:rotateY(-18deg)] group-hover:[transform:translateY(-10px)_rotateY(-26deg)_translateZ(14px)]"
         >
           <div className="spine rounded-l-sm" style={{ background: `linear-gradient(90deg, color-mix(in srgb, ${color} 60%, #000), ${color})` }}>
